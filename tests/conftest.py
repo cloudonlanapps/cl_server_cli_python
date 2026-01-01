@@ -6,6 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from cl_client.models import JobResponse
+from cl_client.store_models import (
+    Entity,
+    EntityListResponse,
+    EntityPagination,
+    EntityVersion,
+    StoreConfig,
+    StoreOperationResult,
+)
 
 
 @pytest.fixture
@@ -93,4 +101,107 @@ def failed_job() -> JobResponse:
         priority=5,
         created_at=1234567890000,
         completed_at=1234567891000,
+    )
+
+
+# Store-related fixtures
+
+
+@pytest.fixture
+def mock_store_manager():
+    """Create a mock StoreManager for CLI testing."""
+    with patch("cl_client_cli.main.StoreManager") as mock_manager_class:
+        # Create mock manager instance
+        mock_manager = MagicMock()
+        mock_manager.__aenter__ = AsyncMock(return_value=mock_manager)
+        mock_manager.__aexit__ = AsyncMock(return_value=None)
+
+        # Mock all StoreManager methods to return success results
+        mock_manager.list_entities = AsyncMock()
+        mock_manager.read_entity = AsyncMock()
+        mock_manager.create_entity = AsyncMock()
+        mock_manager.update_entity = AsyncMock()
+        mock_manager.patch_entity = AsyncMock()
+        mock_manager.delete_entity = AsyncMock()
+        mock_manager.get_versions = AsyncMock()
+        mock_manager.get_config = AsyncMock()
+        mock_manager.update_read_auth = AsyncMock()
+
+        # Configure the class methods
+        mock_manager_class.guest = MagicMock(return_value=mock_manager)
+        mock_manager_class.authenticated = MagicMock(return_value=mock_manager)
+
+        yield mock_manager
+
+
+@pytest.fixture
+def sample_entity() -> Entity:
+    """Create a sample entity."""
+    return Entity(
+        id=1,
+        label="Test Entity",
+        description="Test description",
+        is_collection=False,
+        file_size=1024,
+        mime_type="image/jpeg",
+        file_path="/media/test.jpg",
+    )
+
+
+@pytest.fixture
+def sample_collection() -> Entity:
+    """Create a sample collection entity."""
+    return Entity(
+        id=2,
+        label="Test Collection",
+        description="Test collection",
+        is_collection=True,
+    )
+
+
+@pytest.fixture
+def sample_entity_list() -> EntityListResponse:
+    """Create a sample entity list response."""
+    return EntityListResponse(
+        items=[
+            Entity(id=1, label="Entity 1", is_collection=False),
+            Entity(id=2, label="Entity 2", is_collection=True),
+        ],
+        pagination=EntityPagination(
+            page=1,
+            page_size=20,
+            total_items=2,
+            total_pages=1,
+            has_next=False,
+            has_prev=False,
+        ),
+    )
+
+
+@pytest.fixture
+def sample_versions() -> list[EntityVersion]:
+    """Create sample entity versions."""
+    return [
+        EntityVersion(
+            version=1,
+            transaction_id=100,
+            operation_type="INSERT",
+            label="Version 1",
+        ),
+        EntityVersion(
+            version=2,
+            transaction_id=101,
+            operation_type="UPDATE",
+            label="Version 2",
+        ),
+    ]
+
+
+@pytest.fixture
+def sample_store_config() -> StoreConfig:
+    """Create a sample store config."""
+    return StoreConfig(
+        read_auth_enabled=True,
+        updated_at=1704067200000,
+        updated_by="admin",
     )

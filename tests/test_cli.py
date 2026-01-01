@@ -7,6 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client.models import JobResponse
+from cl_client.store_models import Entity, EntityListResponse, StoreConfig, StoreOperationResult
 from cl_client_cli.main import cli
 
 
@@ -607,3 +608,306 @@ class TestAdditionalCommands:
 
         assert result.exit_code == 0
         mock_compute_client.media_thumbnail.generate.assert_called_once()
+
+
+class TestStoreCommands:
+    """Tests for store commands."""
+
+    def test_store_list_success(self, mock_store_manager, sample_entity_list):
+        """Test store list command."""
+        # Configure mock to return success result
+        mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
+            success="Entities retrieved successfully",
+            data=sample_entity_list,
+        )
+
+        # Run command
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "list"])
+
+        # Verify
+        assert result.exit_code == 0
+        assert "Entity 1" in result.output
+        assert "Entity 2" in result.output
+        mock_store_manager.list_entities.assert_called_once()
+
+    def test_store_list_with_pagination(self, mock_store_manager, sample_entity_list):
+        """Test store list with pagination options."""
+        mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
+            success="Success",
+            data=sample_entity_list,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "list", "--page", "2", "--page-size", "10"])
+
+        assert result.exit_code == 0
+        # Verify pagination parameters were passed
+        call_kwargs = mock_store_manager.list_entities.call_args[1]
+        assert call_kwargs["page"] == 2
+        assert call_kwargs["page_size"] == 10
+
+    def test_store_list_with_search(self, mock_store_manager, sample_entity_list):
+        """Test store list with search query."""
+        mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
+            success="Success",
+            data=sample_entity_list,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "list", "--search", "test query"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_store_manager.list_entities.call_args[1]
+        assert call_kwargs["search_query"] == "test query"
+
+    def test_store_list_error(self, mock_store_manager):
+        """Test store list with error."""
+        mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
+            error="Unauthorized: Invalid token",
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "list"])
+
+        assert result.exit_code != 0
+        assert "Unauthorized" in result.output
+
+    def test_store_get_success(self, mock_store_manager, sample_entity):
+        """Test store get command."""
+        mock_store_manager.read_entity.return_value = StoreOperationResult[Entity](
+            success="Entity retrieved successfully",
+            data=sample_entity,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "get", "1"])
+
+        assert result.exit_code == 0
+        assert "Test Entity" in result.output
+        assert "Test description" in result.output
+        mock_store_manager.read_entity.assert_called_once_with(entity_id=1, version=None)
+
+    def test_store_get_with_version(self, mock_store_manager, sample_entity):
+        """Test store get with specific version."""
+        mock_store_manager.read_entity.return_value = StoreOperationResult[Entity](
+            success="Success",
+            data=sample_entity,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "get", "1", "--version", "2"])
+
+        assert result.exit_code == 0
+        call_kwargs = mock_store_manager.read_entity.call_args[1]
+        assert call_kwargs["version"] == 2
+
+    def test_store_create_collection(self, mock_store_manager, sample_collection):
+        """Test creating a collection."""
+        mock_store_manager.create_entity.return_value = StoreOperationResult[Entity](
+            success="Entity created successfully",
+            data=sample_collection,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["store", "create", "--label", "Test Collection", "--collection"],
+        )
+
+        assert result.exit_code == 0
+        assert "Created entity" in result.output
+        call_kwargs = mock_store_manager.create_entity.call_args[1]
+        assert call_kwargs["label"] == "Test Collection"
+        assert call_kwargs["is_collection"] is True
+
+    def test_store_create_with_file(self, mock_store_manager, sample_entity, temp_image_file):
+        """Test creating entity with file upload."""
+        mock_store_manager.create_entity.return_value = StoreOperationResult[Entity](
+            success="Entity created successfully",
+            data=sample_entity,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "store",
+                "create",
+                "--label",
+                "Photo",
+                "--description",
+                "Test photo",
+                "--file",
+                str(temp_image_file),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Created entity" in result.output
+        call_kwargs = mock_store_manager.create_entity.call_args[1]
+        assert call_kwargs["label"] == "Photo"
+        assert call_kwargs["description"] == "Test photo"
+        assert call_kwargs["image_path"] is not None
+
+    def test_store_update_success(self, mock_store_manager, sample_entity):
+        """Test store update command."""
+        mock_store_manager.update_entity.return_value = StoreOperationResult[Entity](
+            success="Entity updated successfully",
+            data=sample_entity,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["store", "update", "1", "--label", "Updated Label"],
+        )
+
+        assert result.exit_code == 0
+        assert "Updated entity" in result.output
+        call_kwargs = mock_store_manager.update_entity.call_args[1]
+        assert call_kwargs["entity_id"] == 1
+        assert call_kwargs["label"] == "Updated Label"
+
+    def test_store_patch_label(self, mock_store_manager, sample_entity):
+        """Test store patch command for label."""
+        mock_store_manager.patch_entity.return_value = StoreOperationResult[Entity](
+            success="Entity patched successfully",
+            data=sample_entity,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["store", "patch", "1", "--label", "Patched Label"],
+        )
+
+        assert result.exit_code == 0
+        call_kwargs = mock_store_manager.patch_entity.call_args[1]
+        assert call_kwargs["entity_id"] == 1
+        assert call_kwargs["label"] == "Patched Label"
+
+    def test_store_patch_soft_delete(self, mock_store_manager, sample_entity):
+        """Test store patch for soft delete."""
+        deleted_entity = Entity(id=1, label="Test", is_deleted=True)
+        mock_store_manager.patch_entity.return_value = StoreOperationResult[Entity](
+            success="Entity patched successfully",
+            data=deleted_entity,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "patch", "1", "--delete"])
+
+        assert result.exit_code == 0
+        assert "Deleted entity" in result.output
+        call_kwargs = mock_store_manager.patch_entity.call_args[1]
+        assert call_kwargs["is_deleted"] is True
+
+    def test_store_patch_restore(self, mock_store_manager, sample_entity):
+        """Test store patch for restore."""
+        mock_store_manager.patch_entity.return_value = StoreOperationResult[Entity](
+            success="Entity patched successfully",
+            data=sample_entity,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "patch", "1", "--restore"])
+
+        assert result.exit_code == 0
+        assert "Restored entity" in result.output
+        call_kwargs = mock_store_manager.patch_entity.call_args[1]
+        assert call_kwargs["is_deleted"] is False
+
+    def test_store_delete_success(self, mock_store_manager):
+        """Test store delete command."""
+        mock_store_manager.delete_entity.return_value = StoreOperationResult[None](
+            success="Entity deleted successfully",
+            data=None,
+        )
+
+        runner = CliRunner()
+        # Use --yes flag to bypass confirmation
+        result = runner.invoke(cli, ["store", "delete", "1", "--yes"])
+
+        assert result.exit_code == 0
+        assert "Deleted entity" in result.output
+        mock_store_manager.delete_entity.assert_called_once_with(entity_id=1)
+
+    def test_store_versions_success(self, mock_store_manager, sample_versions):
+        """Test store versions command."""
+        mock_store_manager.get_versions.return_value = StoreOperationResult[list](
+            success="Version history retrieved successfully",
+            data=sample_versions,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "versions", "1"])
+
+        assert result.exit_code == 0
+        assert "Version 1" in result.output
+        assert "Version 2" in result.output
+        mock_store_manager.get_versions.assert_called_once_with(entity_id=1)
+
+    def test_store_admin_config(self, mock_store_manager, sample_store_config):
+        """Test store admin config command."""
+        mock_store_manager.get_config.return_value = StoreOperationResult(
+            success="Configuration retrieved successfully",
+            data=sample_store_config,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "admin", "config"])
+
+        assert result.exit_code == 0
+        assert "Store Configuration" in result.output
+        assert "Yes" in result.output  # read_auth_enabled is displayed as "Yes"
+        mock_store_manager.get_config.assert_called_once()
+
+    def test_store_admin_set_read_auth(self, mock_store_manager, sample_store_config):
+        """Test store admin set-read-auth command."""
+        updated_config = StoreConfig(
+            read_auth_enabled=False,
+            updated_at=1704153600000,
+            updated_by="admin",
+        )
+        mock_store_manager.update_read_auth.return_value = StoreOperationResult(
+            success="Read authentication configuration updated successfully",
+            data=updated_config,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "admin", "set-read-auth", "false"])
+
+        assert result.exit_code == 0
+        assert "disabled" in result.output
+        mock_store_manager.update_read_auth.assert_called_once_with(enabled=False)
+
+    def test_store_list_with_output_file(self, mock_store_manager, sample_entity_list, tmp_path):
+        """Test store list with JSON output file."""
+        output_file = tmp_path / "entities.json"
+        mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
+            success="Success",
+            data=sample_entity_list,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "list", "--output", str(output_file)])
+
+        assert result.exit_code == 0
+        assert output_file.exists()
+        assert "Saved to" in result.output
+
+    def test_store_get_with_output_file(self, mock_store_manager, sample_entity, tmp_path):
+        """Test store get with JSON output file."""
+        output_file = tmp_path / "entity.json"
+        mock_store_manager.read_entity.return_value = StoreOperationResult[Entity](
+            success="Success",
+            data=sample_entity,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "get", "1", "--output", str(output_file)])
+
+        assert result.exit_code == 0
+        assert output_file.exists()
+        assert "Saved to" in result.output

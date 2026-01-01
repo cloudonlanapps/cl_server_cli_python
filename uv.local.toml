@@ -1,0 +1,5 @@
+# Local development overrides for uv
+# This file is not committed to git - used for local development only
+
+[tool.uv.sources]
+cl-client = { path = "../../sdks/pysdk", editable = true }

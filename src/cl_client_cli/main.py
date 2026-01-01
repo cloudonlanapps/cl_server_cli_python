@@ -9,9 +9,8 @@ import click
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.table import Table
-from rich import print as rprint
 
-from cl_client import ComputeClient
+from cl_client import ComputeClient, SessionManager, ServerConfig, StoreManager
 from cl_client.models import JobResponse
 
 console = Console()
@@ -94,23 +93,175 @@ def print_job_result(job: JobResponse):
 
 @click.group()
 @click.version_option()
-def cli():
-    """CL Client CLI - Command-line interface for compute operations.
+@click.option(
+    "--username",
+    envvar="CL_USERNAME",
+    help="Username for authentication",
+)
+@click.option(
+    "--password",
+    envvar="CL_PASSWORD",
+    help="Password for authentication",
+)
+@click.option(
+    "--auth-url",
+    envvar="AUTH_URL",
+    default="http://localhost:8000",
+    help="Auth service URL",
+)
+@click.option(
+    "--compute-url",
+    envvar="COMPUTE_URL",
+    default="http://localhost:8002",
+    help="Compute service URL",
+)
+@click.option(
+    "--store-url",
+    envvar="STORE_URL",
+    default="http://localhost:8001",
+    help="Store service URL",
+)
+@click.option(
+    "--no-auth",
+    is_flag=True,
+    default=False,
+    help="Disable authentication (use no-auth mode)",
+)
+@click.pass_context
+def cli(
+    ctx: click.Context,
+    username: Optional[str],
+    password: Optional[str],
+    auth_url: str,
+    compute_url: str,
+    store_url: str,
+    no_auth: bool,
+):
+    """CL Client CLI - Command-line interface for compute, store, and auth operations.
 
     Examples:
+      # No-auth mode (default if no credentials provided)
       cl-client clip-embedding embed image.jpg --watch
+
+      # With authentication
+      cl-client --username user --password pass clip-embedding embed image.jpg
+
+      # Store operations
+      cl-client store list --page 1 --page-size 20
+      cl-client --username user --password pass store create --label "My Photo" --file photo.jpg
+
+      # Using environment variables
+      export CL_USERNAME=user CL_PASSWORD=pass
       cl-client media-thumbnail generate video.mp4 -w 256 -h 256
-      cl-client hash compute image.jpg
-      cl-client download <job-id> output/result.npy result.npy
+
+      # Explicit no-auth mode
+      cl-client --no-auth hash compute image.jpg
     """
-    pass
+    # Store config in context for commands to access
+    ctx.ensure_object(dict)
+    ctx.obj["username"] = username
+    ctx.obj["password"] = password
+    ctx.obj["auth_url"] = auth_url
+    ctx.obj["compute_url"] = compute_url
+    ctx.obj["store_url"] = store_url
+    ctx.obj["no_auth"] = no_auth
+    ctx.obj["server_config"] = ServerConfig(
+        auth_url=auth_url,
+        compute_url=compute_url,
+        store_url=store_url,
+    )
+
+
+async def get_client(ctx: click.Context) -> ComputeClient:
+    """Get ComputeClient based on CLI context (auth or no-auth mode).
+
+    Returns:
+        ComputeClient instance (caller must close it)
+    """
+    username = ctx.obj.get("username")
+    password = ctx.obj.get("password")
+    no_auth = ctx.obj.get("no_auth", False)
+    server_config = ctx.obj.get("server_config")
+
+    # If no credentials or --no-auth flag, use no-auth mode
+    if no_auth or not (username and password):
+        return ComputeClient(
+            base_url=server_config.compute_url,
+            server_config=server_config,
+        )
+
+    # With credentials: create session, login, return client
+    session = SessionManager(server_config=server_config)
+    try:
+        await session.login(username, password)
+        # Store session in context for cleanup
+        ctx.obj["session"] = session
+        return session.create_compute_client()
+    except Exception as e:
+        await session.close()
+        console.print(f"[red]Authentication failed: {e}[/red]")
+        sys.exit(1)
+
+
+async def get_session_manager(ctx: click.Context) -> SessionManager:
+    """Get authenticated SessionManager for admin operations.
+
+    Raises:
+        SystemExit if authentication fails or no credentials provided
+    """
+    username = ctx.obj.get("username")
+    password = ctx.obj.get("password")
+    server_config = ctx.obj.get("server_config")
+
+    if not username or not password:
+        console.print("[red]Error: Username and password required for this operation[/red]")
+        console.print("Use --username and --password flags or set CL_USERNAME and CL_PASSWORD env vars")
+        sys.exit(1)
+
+    session = SessionManager(server_config=server_config)
+    try:
+        await session.login(username, password)
+        return session
+    except Exception as e:
+        await session.close()
+        console.print(f"[red]Authentication failed: {e}[/red]")
+        sys.exit(1)
+
+
+async def get_store_manager(ctx: click.Context):
+    """Get StoreManager based on CLI context (auth or guest mode).
+
+    Returns:
+        StoreManager instance (caller must close it)
+    """
+    username = ctx.obj.get("username")
+    password = ctx.obj.get("password")
+    no_auth = ctx.obj.get("no_auth", False)
+    server_config = ctx.obj.get("server_config")
+
+    # If no credentials or --no-auth flag, use guest mode
+    if no_auth or not (username and password):
+        return StoreManager.guest(base_url=server_config.store_url)
+
+    # With credentials: create session, login, return store manager
+    session = SessionManager(server_config=server_config)
+    try:
+        await session.login(username, password)
+        # Store session in context for cleanup
+        ctx.obj["session"] = session
+        return session.create_store_manager()
+    except Exception as e:
+        await session.close()
+        console.print(f"[red]Authentication failed: {e}[/red]")
+        sys.exit(1)
 
 
 @cli.command()
 @click.argument("job_id", type=str)
 @click.argument("file_path", type=str)
 @click.argument("destination", type=click.Path(path_type=Path), required=False)
-def download(job_id: str, file_path: str, destination: Optional[Path]):
+@click.pass_context
+def download(ctx: click.Context, job_id: str, file_path: str, destination: Optional[Path]):
     """Download output file from a completed job.
 
     Args:
@@ -124,16 +275,757 @@ def download(job_id: str, file_path: str, destination: Optional[Path]):
     """
     async def run():
         # Default destination to just the filename
-        dest = destination or Path(file_path).name
+        dest_path = destination if destination else Path(Path(file_path).name)
 
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             with console.status(f"[bold green]Downloading {file_path}..."):
-                await client.download_job_file(job_id, file_path, dest)
+                await client.download_job_file(job_id, file_path, dest_path)
 
-            console.print(f"[green]✓ Downloaded to {dest}[/green]")
+            console.print(f"[green]✓ Downloaded to {dest_path}[/green]")
             console.print(f"  Job ID: {job_id}")
             console.print(f"  File: {file_path}")
-            console.print(f"  Size: {dest.stat().st_size} bytes")
+            console.print(f"  Size: {dest_path.stat().st_size} bytes")
+        finally:
+            await client.close()
+            # Close session if exists
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+# User Management Commands
+
+
+@cli.group()
+def user():
+    """User management operations (admin only)."""
+    pass
+
+
+@user.command("create")
+@click.argument("username", type=str)
+@click.argument("password", type=str)
+@click.option("--admin", is_flag=True, default=False, help="Grant admin privileges")
+@click.option(
+    "--permissions",
+    "-p",
+    multiple=True,
+    help="Permissions to grant (can specify multiple times)",
+)
+@click.pass_context
+def user_create(
+    ctx: click.Context,
+    username: str,
+    password: str,
+    admin: bool,
+    permissions: tuple[str, ...],
+):
+    """Create a new user (admin only).
+
+    Examples:
+        cl-client --username admin --password admin user create newuser pass123
+        cl-client user create john doe123 --admin
+        cl-client user create jane doe456 -p read:jobs -p write:jobs
+    """
+    from cl_client import UserCreateRequest
+
+    async def run():
+        session = await get_session_manager(ctx)
+        try:
+            user_create = UserCreateRequest(
+                username=username,
+                password=password,
+                is_admin=admin,
+                is_active=True,
+                permissions=list(permissions) if permissions else [],
+            )
+
+            user = await session._auth_client.create_user(  # type: ignore[attr-defined]
+                token=session.get_token(),
+                user_create=user_create,
+            )
+
+            console.print(f"[green]✓ User created successfully[/green]")
+            table = Table(title=f"User {user.username}")
+            table.add_column("Field", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_row("ID", str(user.id))
+            table.add_row("Username", user.username)
+            table.add_row("Admin", "Yes" if user.is_admin else "No")
+            table.add_row("Active", "Yes" if user.is_active else "No")
+            table.add_row("Permissions", ", ".join(user.permissions) if user.permissions else "None")
+            console.print(table)
+        finally:
+            await session.close()
+
+    asyncio.run(run())
+
+
+@user.command("list")
+@click.option("--skip", default=0, help="Number of users to skip")
+@click.option("--limit", default=100, help="Maximum number of users to return")
+@click.pass_context
+def user_list(ctx: click.Context, skip: int, limit: int):
+    """List all users (admin only).
+
+    Examples:
+        cl-client --username admin --password admin user list
+        cl-client user list --skip 10 --limit 20
+    """
+    async def run():
+        session = await get_session_manager(ctx)
+        try:
+            users = await session._auth_client.list_users(  # type: ignore[attr-defined]
+                token=session.get_token(),
+                skip=skip,
+                limit=limit,
+            )
+
+            if not users:
+                console.print("[yellow]No users found[/yellow]")
+                return
+
+            table = Table(title=f"Users ({len(users)} found)")
+            table.add_column("ID", style="cyan")
+            table.add_column("Username", style="green")
+            table.add_column("Admin", style="magenta")
+            table.add_column("Active", style="blue")
+            table.add_column("Permissions", style="yellow")
+
+            for user in users:
+                table.add_row(
+                    str(user.id),
+                    user.username,
+                    "✓" if user.is_admin else "",
+                    "✓" if user.is_active else "",
+                    ", ".join(user.permissions) if user.permissions else "",
+                )
+
+            console.print(table)
+        finally:
+            await session.close()
+
+    asyncio.run(run())
+
+
+@user.command("get")
+@click.argument("user_id", type=int)
+@click.pass_context
+def user_get(ctx: click.Context, user_id: int):
+    """Get user details by ID (admin only).
+
+    Examples:
+        cl-client --username admin --password admin user get 2
+    """
+    async def run():
+        session = await get_session_manager(ctx)
+        try:
+            user = await session._auth_client.get_user(  # type: ignore[attr-defined]
+                token=session.get_token(),
+                user_id=user_id,
+            )
+
+            table = Table(title=f"User {user.username}")
+            table.add_column("Field", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_row("ID", str(user.id))
+            table.add_row("Username", user.username)
+            table.add_row("Admin", "Yes" if user.is_admin else "No")
+            table.add_row("Active", "Yes" if user.is_active else "No")
+            table.add_row("Created", str(user.created_at))
+            table.add_row("Permissions", ", ".join(user.permissions) if user.permissions else "None")
+            console.print(table)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
+        finally:
+            await session.close()
+
+    asyncio.run(run())
+
+
+@user.command("update")
+@click.argument("user_id", type=int)
+@click.option("--password", help="New password")
+@click.option("--admin/--no-admin", default=None, help="Grant/revoke admin privileges")
+@click.option("--active/--inactive", default=None, help="Activate/deactivate user")
+@click.option(
+    "--permissions",
+    "-p",
+    multiple=True,
+    help="Permissions to grant (replaces existing permissions)",
+)
+@click.pass_context
+def user_update(
+    ctx: click.Context,
+    user_id: int,
+    password: Optional[str],
+    admin: Optional[bool],
+    active: Optional[bool],
+    permissions: tuple[str, ...],
+):
+    """Update user (admin only).
+
+    Examples:
+        cl-client user update 2 --password newpass123
+        cl-client user update 2 --admin
+        cl-client user update 2 --inactive
+        cl-client user update 2 -p read:jobs -p write:jobs -p admin
+    """
+    from cl_client import UserUpdateRequest
+
+    async def run():
+        session = await get_session_manager(ctx)
+        try:
+            # Build update request with only provided fields
+            user_update = UserUpdateRequest(
+                password=password,
+                is_admin=admin,
+                is_active=active,
+                permissions=list(permissions) if permissions else None,
+            )
+
+            user = await session._auth_client.update_user(  # type: ignore[attr-defined]
+                token=session.get_token(),
+                user_id=user_id,
+                user_update=user_update,
+            )
+
+            console.print(f"[green]✓ User updated successfully[/green]")
+            table = Table(title=f"User {user.username}")
+            table.add_column("Field", style="cyan")
+            table.add_column("Value", style="green")
+            table.add_row("ID", str(user.id))
+            table.add_row("Username", user.username)
+            table.add_row("Admin", "Yes" if user.is_admin else "No")
+            table.add_row("Active", "Yes" if user.is_active else "No")
+            table.add_row("Permissions", ", ".join(user.permissions) if user.permissions else "None")
+            console.print(table)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
+        finally:
+            await session.close()
+
+    asyncio.run(run())
+
+
+@user.command("delete")
+@click.argument("user_id", type=int)
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def user_delete(ctx: click.Context, user_id: int, yes: bool):
+    """Delete user (admin only).
+
+    Examples:
+        cl-client user delete 2
+        cl-client user delete 2 --yes  # Skip confirmation
+    """
+    async def run():
+        session = await get_session_manager(ctx)
+        try:
+            # Get user details first for confirmation
+            user = await session._auth_client.get_user(  # type: ignore[attr-defined]
+                token=session.get_token(),
+                user_id=user_id,
+            )
+
+            if not yes:
+                confirm = click.confirm(
+                    f"Are you sure you want to delete user '{user.username}' (ID: {user_id})?",
+                    abort=True,
+                )
+
+            await session._auth_client.delete_user(  # type: ignore[attr-defined]
+                token=session.get_token(),
+                user_id=user_id,
+            )
+
+            console.print(f"[green]✓ User '{user.username}' deleted successfully[/green]")
+        except click.Abort:
+            console.print("[yellow]Deletion cancelled[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            sys.exit(1)
+        finally:
+            await session.close()
+
+    asyncio.run(run())
+
+
+# Store Commands
+
+
+@cli.group()
+def store():
+    """Store operations - manage media entities and collections."""
+    pass
+
+
+@store.command("list")
+@click.option("--page", default=1, type=int, help="Page number (1-indexed)")
+@click.option("--page-size", default=20, type=int, help="Items per page (max 100)")
+@click.option("--search", help="Search query for label/description")
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Save results to JSON file")
+@click.pass_context
+def list_entities(ctx: click.Context, page: int, page_size: int, search: Optional[str], output: Optional[Path]):
+    """List entities with pagination and search.
+
+    Examples:
+        cl-client store list --page 1 --page-size 20
+        cl-client store list --search "vacation"
+        cl-client store list --output entities.json
+    """
+    import json
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            result = await manager.list_entities(
+                page=page,
+                page_size=page_size,
+                search_query=search,
+            )
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            # Display results
+            entities = result.data.items
+            pagination = result.data.pagination
+
+            console.print(f"[bold]Page {pagination.page}/{pagination.total_pages}[/bold] "
+                         f"(Total: {pagination.total_items} entities)")
+
+            if entities:
+                table = Table(title="Entities")
+                table.add_column("ID", style="cyan")
+                table.add_column("Label", style="green")
+                table.add_column("Type", style="magenta")
+                table.add_column("Size", style="yellow")
+                table.add_column("Updated", style="blue")
+
+                for entity in entities:
+                    entity_type = "Collection" if entity.is_collection else "Media"
+                    size = f"{entity.file_size} bytes" if entity.file_size else "-"
+                    updated = entity.updated_date_datetime.strftime("%Y-%m-%d %H:%M") if entity.updated_date_datetime else "-"
+
+                    table.add_row(
+                        str(entity.id),
+                        entity.label or "(no label)",
+                        entity_type,
+                        size,
+                        updated,
+                    )
+
+                console.print(table)
+            else:
+                console.print("[yellow]No entities found[/yellow]")
+
+            # Save to file if requested
+            if output:
+                with open(output, "w") as f:
+                    json.dump(result.data.model_dump(), f, indent=2, default=str)
+                console.print(f"\n[green]✓ Saved to {output}[/green]")
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store.command("create")
+@click.option("--label", help="Entity label/name")
+@click.option("--description", help="Entity description")
+@click.option("--collection", is_flag=True, help="Create as collection (folder)")
+@click.option("--parent-id", type=int, help="Parent collection ID")
+@click.option("--file", type=click.Path(exists=True, path_type=Path), help="Media file to upload")
+@click.pass_context
+def create_entity(ctx: click.Context, label: Optional[str], description: Optional[str], collection: bool, parent_id: Optional[int], file: Optional[Path]):
+    """Create a new entity (collection or media with file).
+
+    Examples:
+        cl-client store create --label "My Photos" --collection
+        cl-client store create --label "Beach Sunset" --file sunset.jpg
+        cl-client store create --label "Vacation" --description "Summer 2024" --file photo.jpg --parent-id 5
+    """
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            result = await manager.create_entity(
+                label=label,
+                description=description,
+                is_collection=collection,
+                parent_id=parent_id,
+                image_path=file,
+            )
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            entity = result.data
+            console.print(f"[green]✓ Created entity [ID: {entity.id}][/green]")
+
+            table = Table(title=f"Entity {entity.id}")
+            table.add_column("Field", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("Label", entity.label or "(no label)")
+            table.add_row("Type", "Collection" if entity.is_collection else "Media")
+            if entity.description:
+                table.add_row("Description", entity.description)
+            if entity.parent_id:
+                table.add_row("Parent ID", str(entity.parent_id))
+            if entity.file_path:
+                table.add_row("File", entity.file_path)
+                table.add_row("Size", f"{entity.file_size} bytes")
+                table.add_row("Dimensions", f"{entity.width}x{entity.height}")
+                table.add_row("MD5", entity.md5 or "")
+
+            console.print(table)
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store.command("get")
+@click.argument("entity_id", type=int)
+@click.option("--version", type=int, help="Specific version to retrieve")
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Save entity data to JSON file")
+@click.pass_context
+def get_entity(ctx: click.Context, entity_id: int, version: Optional[int], output: Optional[Path]):
+    """Get entity by ID (optionally specific version).
+
+    Examples:
+        cl-client store get 123
+        cl-client store get 123 --version 2
+        cl-client store get 123 --output entity.json
+    """
+    import json
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            result = await manager.read_entity(entity_id=entity_id, version=version)
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            entity = result.data
+            table = Table(title=f"Entity {entity.id}")
+            table.add_column("Field", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("ID", str(entity.id))
+            table.add_row("Label", entity.label or "(no label)")
+            table.add_row("Description", entity.description or "")
+            table.add_row("Type", "Collection" if entity.is_collection else "Media")
+            table.add_row("Parent ID", str(entity.parent_id) if entity.parent_id else "-")
+            table.add_row("Created", str(entity.create_date_datetime) if entity.create_date_datetime else "")
+            table.add_row("Updated", str(entity.updated_date_datetime) if entity.updated_date_datetime else "")
+            table.add_row("Deleted", "Yes" if entity.is_deleted else "No")
+
+            if not entity.is_collection and entity.file_size:
+                table.add_row("File Size", f"{entity.file_size} bytes")
+                table.add_row("Dimensions", f"{entity.width}x{entity.height}")
+                table.add_row("MIME Type", entity.mime_type or "")
+                table.add_row("MD5", entity.md5 or "")
+
+            console.print(table)
+
+            if output:
+                with open(output, "w") as f:
+                    json.dump(entity.model_dump(), f, indent=2, default=str)
+                console.print(f"\n[green]✓ Saved to {output}[/green]")
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store.command("update")
+@click.argument("entity_id", type=int)
+@click.option("--label", required=True, help="New label")
+@click.option("--description", help="New description")
+@click.option("--collection", is_flag=True, help="Set as collection")
+@click.option("--parent-id", type=int, help="New parent collection ID")
+@click.option("--file", type=click.Path(exists=True, path_type=Path), help="New media file")
+@click.pass_context
+def update_entity(ctx: click.Context, entity_id: int, label: str, description: Optional[str], collection: bool, parent_id: Optional[int], file: Optional[Path]):
+    """Full update of an entity (requires label).
+
+    Examples:
+        cl-client store update 123 --label "Updated Label"
+        cl-client store update 123 --label "New Title" --description "Updated desc"
+        cl-client store update 123 --label "Photo" --file new_photo.jpg
+    """
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            result = await manager.update_entity(
+                entity_id=entity_id,
+                label=label,
+                description=description,
+                is_collection=collection,
+                parent_id=parent_id,
+                image_path=file,
+            )
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            console.print(f"[green]✓ Updated entity [ID: {entity_id}][/green]")
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store.command("patch")
+@click.argument("entity_id", type=int)
+@click.option("--label", help="Update label")
+@click.option("--description", help="Update description")
+@click.option("--parent-id", type=int, help="Update parent ID")
+@click.option("--delete", "soft_delete", is_flag=True, help="Soft delete (set is_deleted=true)")
+@click.option("--restore", is_flag=True, help="Restore (set is_deleted=false)")
+@click.pass_context
+def patch_entity(ctx: click.Context, entity_id: int, label: Optional[str], description: Optional[str], parent_id: Optional[int], soft_delete: bool, restore: bool):
+    """Partial update of an entity (only update specified fields).
+
+    Examples:
+        cl-client store patch 123 --label "New Label"
+        cl-client store patch 123 --description "Updated description"
+        cl-client store patch 123 --delete
+        cl-client store patch 123 --restore
+    """
+    if soft_delete and restore:
+        console.print("[red]Error: Cannot use both --delete and --restore[/red]")
+        sys.exit(1)
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            is_deleted = None
+            if soft_delete:
+                is_deleted = True
+            elif restore:
+                is_deleted = False
+
+            result = await manager.patch_entity(
+                entity_id=entity_id,
+                label=label,
+                description=description,
+                parent_id=parent_id,
+                is_deleted=is_deleted,
+            )
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            action = "Deleted" if soft_delete else "Restored" if restore else "Updated"
+            console.print(f"[green]✓ {action} entity [ID: {entity_id}][/green]")
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store.command("delete")
+@click.argument("entity_id", type=int)
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def delete_entity(ctx: click.Context, entity_id: int, yes: bool):
+    """Permanently delete an entity (hard delete).
+
+    Examples:
+        cl-client store delete 123
+        cl-client store delete 123 --yes  # Skip confirmation
+    """
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            # Get entity details first for confirmation
+            if not yes:
+                read_result = await manager.read_entity(entity_id=entity_id)
+                if read_result.is_error:
+                    console.print(f"[red]Error: {read_result.error}[/red]")
+                    sys.exit(1)
+
+                entity = read_result.data
+                confirm = click.confirm(
+                    f"Are you sure you want to permanently delete entity '{entity.label}' (ID: {entity_id})?",
+                    abort=True,
+                )
+
+            result = await manager.delete_entity(entity_id=entity_id)
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            console.print(f"[green]✓ Deleted entity [ID: {entity_id}][/green]")
+        except click.Abort:
+            console.print("[yellow]Deletion cancelled[/yellow]")
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store.command("versions")
+@click.argument("entity_id", type=int)
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Save versions to JSON file")
+@click.pass_context
+def get_versions(ctx: click.Context, entity_id: int, output: Optional[Path]):
+    """Get version history for an entity.
+
+    Examples:
+        cl-client store versions 123
+        cl-client store versions 123 --output versions.json
+    """
+    import json
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            result = await manager.get_versions(entity_id=entity_id)
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            versions = result.data
+            console.print(f"[bold]Version history for entity [ID: {entity_id}][/bold]")
+            console.print(f"Total versions: {len(versions)}\n")
+
+            if versions:
+                table = Table(title="Versions")
+                table.add_column("Version", style="cyan")
+                table.add_column("Label", style="green")
+                table.add_column("Operation", style="magenta")
+                table.add_column("Transaction", style="yellow")
+
+                for v in versions:
+                    table.add_row(
+                        str(v.version),
+                        v.label or "(no label)",
+                        v.operation_type or "",
+                        str(v.transaction_id),
+                    )
+
+                console.print(table)
+            else:
+                console.print("[yellow]No version history found[/yellow]")
+
+            if output:
+                with open(output, "w") as f:
+                    json.dump([v.model_dump() for v in versions], f, indent=2, default=str)
+                console.print(f"\n[green]✓ Saved to {output}[/green]")
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+# Store Admin Commands
+
+
+@store.group("admin")
+def store_admin():
+    """Admin operations for store configuration."""
+    pass
+
+
+@store_admin.command("config")
+@click.pass_context
+def get_config(ctx: click.Context):
+    """Get store configuration (admin only).
+
+    Examples:
+        cl-client --username admin --password admin store admin config
+    """
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            result = await manager.get_config()
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            config = result.data
+            table = Table(title="Store Configuration")
+            table.add_column("Setting", style="cyan")
+            table.add_column("Value", style="green")
+
+            table.add_row("Read Auth Enabled", "Yes" if config.read_auth_enabled else "No")
+            table.add_row("Updated At", str(config.updated_at_datetime) if config.updated_at_datetime else "")
+            table.add_row("Updated By", config.updated_by or "")
+
+            console.print(table)
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store_admin.command("set-read-auth")
+@click.argument("enabled", type=bool)
+@click.pass_context
+def set_read_auth(ctx: click.Context, enabled: bool):
+    """Enable or disable read authentication (admin only).
+
+    Examples:
+        cl-client store admin set-read-auth true
+        cl-client store admin set-read-auth false
+    """
+    async def run():
+        manager = await get_store_manager(ctx)
+        try:
+            result = await manager.update_read_auth(enabled=enabled)
+
+            if result.is_error:
+                console.print(f"[red]Error: {result.error}[/red]")
+                sys.exit(1)
+
+            console.print(f"[green]✓ Read authentication {'enabled' if enabled else 'disabled'}[/green]")
+        finally:
+            await manager._store_client.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -152,7 +1044,8 @@ def clip_embedding():
 @click.option("--watch", "-w", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=60.0, help="Timeout in seconds")
 @click.option("--output", "-o", type=click.Path(path_type=Path), help="Download embedding to this file")
-def embed(image: Path, watch: bool, timeout: float, output: Optional[Path]):
+@click.pass_context
+def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]):
     """Generate CLIP embedding for an image.
 
     Returns 512-dimensional embedding vector.
@@ -160,9 +1053,11 @@ def embed(image: Path, watch: bool, timeout: float, output: Optional[Path]):
     Examples:
         cl-client clip-embedding embed image.jpg --output embedding.npy
         cl-client clip-embedding embed image.jpg --watch -o result.npy
+        cl-client --username user --password pass clip-embedding embed image.jpg
     """
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 # Real-time progress with MQTT
                 tracker = JobProgressTracker(
@@ -213,6 +1108,11 @@ def embed(image: Path, watch: bool, timeout: float, output: Optional[Path]):
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -232,15 +1132,18 @@ def media_thumbnail():
 @click.option("--height", "-h", type=int, required=True, help="Thumbnail height")
 @click.option("--watch", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=60.0, help="Timeout in seconds")
-def generate(media: Path, width: int, height: int, watch: bool, timeout: float):
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Download thumbnail to this file")
+@click.pass_context
+def generate(ctx: click.Context, media: Path, width: int, height: int, watch: bool, timeout: float, output: Optional[Path]):
     """Generate thumbnail for image or video.
 
     Examples:
       cl-client media-thumbnail generate video.mp4 -w 256 -h 256
-      cl-client media-thumbnail generate image.jpg -w 128 -h 128 --watch
+      cl-client media-thumbnail generate image.jpg -w 128 -h 128 --watch -o thumb.jpg
     """
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 tracker = JobProgressTracker(
                     job_id="pending",
@@ -260,6 +1163,12 @@ def generate(media: Path, width: int, height: int, watch: bool, timeout: float):
                 if final_job and final_job.status == "completed":
                     console.print(f"[green]✓ Thumbnail generated[/green]")
                     print_job_result(final_job)
+
+                    # Download if output specified
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(final_job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
@@ -276,9 +1185,20 @@ def generate(media: Path, width: int, height: int, watch: bool, timeout: float):
                 if job.status == "completed":
                     console.print(f"[green]✓ Completed[/green]")
                     print_job_result(job)
+
+                    # Download if output specified
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -296,13 +1216,16 @@ def hash():
 @click.argument("image", type=click.Path(exists=True, path_type=Path))
 @click.option("--watch", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=30.0, help="Timeout in seconds")
-def compute(image: Path, watch: bool, timeout: float):
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Download hash output to this file")
+@click.pass_context
+def compute(ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]):
     """Compute perceptual hash for an image.
 
     Returns phash, dhash, and other hash values.
     """
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 tracker = JobProgressTracker(
                     job_id="pending",
@@ -320,6 +1243,12 @@ def compute(image: Path, watch: bool, timeout: float):
                 if final_job and final_job.status == "completed":
                     console.print(f"[green]✓ Hash computed[/green]")
                     print_job_result(final_job)
+
+                    # Download if output specified
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(final_job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
@@ -334,9 +1263,20 @@ def compute(image: Path, watch: bool, timeout: float):
                 if job.status == "completed":
                     console.print(f"[green]✓ Completed[/green]")
                     print_job_result(job)
+
+                    # Download if output specified
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -354,10 +1294,13 @@ def exif():
 @click.argument("image", type=click.Path(exists=True, path_type=Path))
 @click.option("--watch", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=30.0, help="Timeout in seconds")
-def extract(image: Path, watch: bool, timeout: float):
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Download EXIF output to this file")
+@click.pass_context
+def extract(ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]):
     """Extract EXIF metadata from an image."""
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 tracker = JobProgressTracker(
                     job_id="pending",
@@ -375,6 +1318,12 @@ def extract(image: Path, watch: bool, timeout: float):
                 if final_job and final_job.status == "completed":
                     console.print(f"[green]✓ EXIF extracted[/green]")
                     print_job_result(final_job)
+
+                    # Download if output specified
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(final_job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
@@ -389,9 +1338,20 @@ def extract(image: Path, watch: bool, timeout: float):
                 if job.status == "completed":
                     console.print(f"[green]✓ Completed[/green]")
                     print_job_result(job)
+
+                    # Download if output specified
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -409,10 +1369,13 @@ def face_detection():
 @click.argument("image", type=click.Path(exists=True, path_type=Path))
 @click.option("--watch", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=30.0, help="Timeout in seconds")
-def detect(image: Path, watch: bool, timeout: float):
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Download face detection output to this file")
+@click.pass_context
+def detect(ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]):
     """Detect faces in an image."""
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 tracker = JobProgressTracker(
                     job_id="pending",
@@ -430,6 +1393,12 @@ def detect(image: Path, watch: bool, timeout: float):
                 if final_job and final_job.status == "completed":
                     console.print(f"[green]✓ Faces detected[/green]")
                     print_job_result(final_job)
+
+                    # Download if output specified
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(final_job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
@@ -444,9 +1413,20 @@ def detect(image: Path, watch: bool, timeout: float):
                 if job.status == "completed":
                     console.print(f"[green]✓ Completed[/green]")
                     print_job_result(job)
+
+                    # Download if output specified
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -468,7 +1448,9 @@ def image_conversion():
 @click.option("--quality", "-q", type=int, default=85, help="Quality (1-100)")
 @click.option("--watch", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=60.0, help="Timeout in seconds")
-def convert(image: Path, output_format: str, quality: int, watch: bool, timeout: float):
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Download output to this file")
+@click.pass_context
+def convert(ctx: click.Context, image: Path, output_format: str, quality: int, watch: bool, timeout: float, output: Optional[Path]):
     """Convert image to different format.
 
     Examples:
@@ -476,7 +1458,8 @@ def convert(image: Path, output_format: str, quality: int, watch: bool, timeout:
       cl-client image-conversion convert image.jpg -f webp --watch
     """
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 tracker = JobProgressTracker(
                     job_id="pending",
@@ -496,6 +1479,10 @@ def convert(image: Path, output_format: str, quality: int, watch: bool, timeout:
                 if final_job and final_job.status == "completed":
                     console.print(f"[green]✓ Conversion completed[/green]")
                     print_job_result(final_job)
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(final_job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
@@ -512,9 +1499,18 @@ def convert(image: Path, output_format: str, quality: int, watch: bool, timeout:
                 if job.status == "completed":
                     console.print(f"[green]✓ Completed[/green]")
                     print_job_result(job)
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -536,13 +1532,16 @@ def dino_embedding():
 @click.argument("image", type=click.Path(exists=True, path_type=Path))
 @click.option("--watch", "-w", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=60.0, help="Timeout in seconds")
-def embed(image: Path, watch: bool, timeout: float):
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Download output to this file")
+@click.pass_context
+def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]):
     """Generate DINO embedding for an image.
 
     Returns 384-dimensional embedding vector.
     """
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 tracker = JobProgressTracker(
                     job_id="pending",
@@ -560,6 +1559,10 @@ def embed(image: Path, watch: bool, timeout: float):
                 if final_job and final_job.status == "completed":
                     console.print(f"[green]✓ Embedding generated[/green]")
                     print_job_result(final_job)
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(final_job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
@@ -574,9 +1577,18 @@ def embed(image: Path, watch: bool, timeout: float):
                 if job.status == "completed":
                     console.print(f"[green]✓ Completed[/green]")
                     print_job_result(job)
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -594,10 +1606,13 @@ def face_embedding():
 @click.argument("image", type=click.Path(exists=True, path_type=Path))
 @click.option("--watch", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=60.0, help="Timeout in seconds")
-def embed(image: Path, watch: bool, timeout: float):
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Download output to this file")
+@click.pass_context
+def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]):
     """Generate face embeddings for an image."""
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 tracker = JobProgressTracker(
                     job_id="pending",
@@ -615,6 +1630,10 @@ def embed(image: Path, watch: bool, timeout: float):
                 if final_job and final_job.status == "completed":
                     console.print(f"[green]✓ Embeddings generated[/green]")
                     print_job_result(final_job)
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(final_job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
@@ -629,9 +1648,18 @@ def embed(image: Path, watch: bool, timeout: float):
                 if job.status == "completed":
                     console.print(f"[green]✓ Completed[/green]")
                     print_job_result(job)
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
 
@@ -649,13 +1677,16 @@ def hls_streaming():
 @click.argument("video", type=click.Path(exists=True, path_type=Path))
 @click.option("--watch", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=120.0, help="Timeout in seconds")
-def generate_manifest(video: Path, watch: bool, timeout: float):
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Download output to this file")
+@click.pass_context
+def generate_manifest(ctx: click.Context, video: Path, watch: bool, timeout: float, output: Optional[Path]):
     """Generate HLS manifest for a video file.
 
     Creates master playlist and variant playlists for adaptive streaming.
     """
     async def run():
-        async with ComputeClient() as client:
+        client = await get_client(ctx)
+        try:
             if watch:
                 tracker = JobProgressTracker(
                     job_id="pending",
@@ -673,6 +1704,10 @@ def generate_manifest(video: Path, watch: bool, timeout: float):
                 if final_job and final_job.status == "completed":
                     console.print(f"[green]✓ HLS manifest generated[/green]")
                     print_job_result(final_job)
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(final_job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
@@ -687,8 +1722,17 @@ def generate_manifest(video: Path, watch: bool, timeout: float):
                 if job.status == "completed":
                     console.print(f"[green]✓ Completed[/green]")
                     print_job_result(job)
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
                     console.print(f"[red]✗ Failed: {job.error_message}[/red]")
                     sys.exit(1)
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
 
     asyncio.run(run())
