@@ -1,9 +1,7 @@
 """Unit tests for CLI commands."""
 
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import pytest
 from click.testing import CliRunner
 
 from cl_client.models import JobResponse

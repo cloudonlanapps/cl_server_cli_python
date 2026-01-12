@@ -348,7 +348,7 @@ def user_create(
                 user_create=user_create,
             )
 
-            console.print(f"[green]✓ User created successfully[/green]")
+            console.print("[green]✓ User created successfully[/green]")
             table = Table(title=f"User {user.username}")
             table.add_column("Field", style="cyan")
             table.add_column("Value", style="green")
@@ -494,7 +494,7 @@ def user_update(
                 user_update=user_update,
             )
 
-            console.print(f"[green]✓ User updated successfully[/green]")
+            console.print("[green]✓ User updated successfully[/green]")
             table = Table(title=f"User {user.username}")
             table.add_column("Field", style="cyan")
             table.add_column("Value", style="green")
@@ -1074,7 +1074,7 @@ def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: 
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ Embedding generated successfully[/green]")
+                    console.print("[green]✓ Embedding generated successfully[/green]")
                     print_job_result(final_job)
 
                     # Download if output specified
@@ -1096,7 +1096,7 @@ def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: 
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
 
                     # Download if output specified
@@ -1161,7 +1161,7 @@ def generate(ctx: click.Context, media: Path, width: int, height: int, watch: bo
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ Thumbnail generated[/green]")
+                    console.print("[green]✓ Thumbnail generated[/green]")
                     print_job_result(final_job)
 
                     # Download if output specified
@@ -1173,7 +1173,7 @@ def generate(ctx: click.Context, media: Path, width: int, height: int, watch: bo
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
             else:
-                with console.status(f"[bold green]Generating thumbnail..."):
+                with console.status("[bold green]Generating thumbnail..."):
                     job = await client.media_thumbnail.generate(
                         media=media,
                         width=width,
@@ -1183,7 +1183,7 @@ def generate(ctx: click.Context, media: Path, width: int, height: int, watch: bo
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
 
                     # Download if output specified
@@ -1241,7 +1241,7 @@ def compute(ctx: click.Context, image: Path, watch: bool, timeout: float, output
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ Hash computed[/green]")
+                    console.print("[green]✓ Hash computed[/green]")
                     print_job_result(final_job)
 
                     # Download if output specified
@@ -1253,7 +1253,7 @@ def compute(ctx: click.Context, image: Path, watch: bool, timeout: float, output
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
             else:
-                with console.status(f"[bold green]Computing hash..."):
+                with console.status("[bold green]Computing hash..."):
                     job = await client.hash.compute(
                         image=image,
                         wait=True,
@@ -1261,7 +1261,7 @@ def compute(ctx: click.Context, image: Path, watch: bool, timeout: float, output
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
 
                     # Download if output specified
@@ -1316,7 +1316,7 @@ def extract(ctx: click.Context, image: Path, watch: bool, timeout: float, output
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ EXIF extracted[/green]")
+                    console.print("[green]✓ EXIF extracted[/green]")
                     print_job_result(final_job)
 
                     # Download if output specified
@@ -1328,7 +1328,7 @@ def extract(ctx: click.Context, image: Path, watch: bool, timeout: float, output
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
             else:
-                with console.status(f"[bold green]Extracting EXIF..."):
+                with console.status("[bold green]Extracting EXIF..."):
                     job = await client.exif.extract(
                         image=image,
                         wait=True,
@@ -1336,7 +1336,7 @@ def extract(ctx: click.Context, image: Path, watch: bool, timeout: float, output
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
 
                     # Download if output specified
@@ -1391,7 +1391,7 @@ def detect(ctx: click.Context, image: Path, watch: bool, timeout: float, output:
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ Faces detected[/green]")
+                    console.print("[green]✓ Faces detected[/green]")
                     print_job_result(final_job)
 
                     # Download if output specified
@@ -1403,7 +1403,7 @@ def detect(ctx: click.Context, image: Path, watch: bool, timeout: float, output:
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
             else:
-                with console.status(f"[bold green]Detecting faces..."):
+                with console.status("[bold green]Detecting faces..."):
                     job = await client.face_detection.detect(
                         image=image,
                         wait=True,
@@ -1411,7 +1411,7 @@ def detect(ctx: click.Context, image: Path, watch: bool, timeout: float, output:
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
 
                     # Download if output specified
@@ -1477,7 +1477,7 @@ def convert(ctx: click.Context, image: Path, output_format: str, quality: int, w
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ Conversion completed[/green]")
+                    console.print("[green]✓ Conversion completed[/green]")
                     print_job_result(final_job)
                     if output and final_job.params and "output_path" in final_job.params:
                         output_path = final_job.params["output_path"]
@@ -1487,7 +1487,7 @@ def convert(ctx: click.Context, image: Path, output_format: str, quality: int, w
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
             else:
-                with console.status(f"[bold green]Converting..."):
+                with console.status("[bold green]Converting..."):
                     job = await client.image_conversion.convert(
                         image=image,
                         output_format=output_format,
@@ -1497,7 +1497,7 @@ def convert(ctx: click.Context, image: Path, output_format: str, quality: int, w
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]
@@ -1557,7 +1557,7 @@ def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: 
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ Embedding generated[/green]")
+                    console.print("[green]✓ Embedding generated[/green]")
                     print_job_result(final_job)
                     if output and final_job.params and "output_path" in final_job.params:
                         output_path = final_job.params["output_path"]
@@ -1567,7 +1567,7 @@ def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: 
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
             else:
-                with console.status(f"[bold green]Processing..."):
+                with console.status("[bold green]Processing..."):
                     job = await client.dino_embedding.embed_image(
                         image=image,
                         wait=True,
@@ -1575,7 +1575,7 @@ def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: 
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]
@@ -1628,7 +1628,7 @@ def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: 
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ Embeddings generated[/green]")
+                    console.print("[green]✓ Embeddings generated[/green]")
                     print_job_result(final_job)
                     if output and final_job.params and "output_path" in final_job.params:
                         output_path = final_job.params["output_path"]
@@ -1638,7 +1638,7 @@ def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: 
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
             else:
-                with console.status(f"[bold green]Processing..."):
+                with console.status("[bold green]Processing..."):
                     job = await client.face_embedding.embed_faces(
                         image=image,
                         wait=True,
@@ -1646,7 +1646,7 @@ def embed(ctx: click.Context, image: Path, watch: bool, timeout: float, output: 
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]
@@ -1702,7 +1702,7 @@ def generate_manifest(ctx: click.Context, video: Path, watch: bool, timeout: flo
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print(f"[green]✓ HLS manifest generated[/green]")
+                    console.print("[green]✓ HLS manifest generated[/green]")
                     print_job_result(final_job)
                     if output and final_job.params and "output_path" in final_job.params:
                         output_path = final_job.params["output_path"]
@@ -1712,7 +1712,7 @@ def generate_manifest(ctx: click.Context, video: Path, watch: bool, timeout: flo
                     console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
                     sys.exit(1)
             else:
-                with console.status(f"[bold green]Generating HLS manifest..."):
+                with console.status("[bold green]Generating HLS manifest..."):
                     job = await client.hls_streaming.generate_manifest(
                         video=video,
                         wait=True,
@@ -1720,7 +1720,7 @@ def generate_manifest(ctx: click.Context, video: Path, watch: bool, timeout: flo
                     )
 
                 if job.status == "completed":
-                    console.print(f"[green]✓ Completed[/green]")
+                    console.print("[green]✓ Completed[/green]")
                     print_job_result(job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]

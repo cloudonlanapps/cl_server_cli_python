@@ -12,7 +12,6 @@ from cl_client.store_models import (
     EntityPagination,
     EntityVersion,
     StoreConfig,
-    StoreOperationResult,
 )
 
 
