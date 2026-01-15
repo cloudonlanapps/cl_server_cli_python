@@ -858,27 +858,27 @@ class TestStoreCommands:
 
         assert result.exit_code == 0
         assert "Store Configuration" in result.output
-        assert "Yes" in result.output  # read_auth_enabled is displayed as "Yes"
+        assert "Disabled" in result.output  # guest_mode is displayed as "Disabled"
         mock_store_manager.get_config.assert_called_once()
 
-    def test_store_admin_set_read_auth(self, mock_store_manager, sample_store_config):
-        """Test store admin set-read-auth command."""
+    def test_store_admin_set_guest_mode(self, mock_store_manager, sample_store_config):
+        """Test store admin set-guest-mode command."""
         updated_config = StoreConfig(
-            read_auth_enabled=False,
+            guest_mode=False,
             updated_at=1704153600000,
             updated_by="admin",
         )
-        mock_store_manager.update_read_auth.return_value = StoreOperationResult(
-            success="Read authentication configuration updated successfully",
+        mock_store_manager.update_guest_mode.return_value = StoreOperationResult(
+            success="Guest mode configuration updated successfully",
             data=updated_config,
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "admin", "set-read-auth", "false"])
+        result = runner.invoke(cli, ["store", "admin", "set-guest-mode", "false"])
 
         assert result.exit_code == 0
         assert "disabled" in result.output
-        mock_store_manager.update_read_auth.assert_called_once_with(enabled=False)
+        mock_store_manager.update_guest_mode.assert_called_once_with(guest_mode=False)
 
     def test_store_list_with_output_file(self, mock_store_manager, sample_entity_list, tmp_path):
         """Test store list with JSON output file."""
@@ -909,3 +909,148 @@ class TestStoreCommands:
         assert result.exit_code == 0
         assert output_file.exists()
         assert "Saved to" in result.output
+
+
+class TestNewDatabaseCommands:
+    """Test database feature commands (jobs, faces, persons, images)."""
+
+    def test_store_jobs(self, mock_store_manager, sample_entity_job):
+        """Test store jobs command."""
+        mock_store_manager.store_client.get_entity_jobs.return_value = [sample_entity_job]
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["store", "jobs", "123"])
+
+        assert result.exit_code == 0
+        assert "Entity Jobs for ID: 123" in result.output
+        assert "Total jobs: 1" in result.output
+        mock_store_manager.store_client.get_entity_jobs.assert_called_once_with(entity_id=123)
+
+    def test_faces_list(self, mock_store_manager, sample_face):
+        """Test faces list command."""
+        mock_store_manager.store_client.get_entity_faces.return_value = [sample_face]
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["faces", "list", "123"])
+
+        assert result.exit_code == 0
+        assert "Faces in Entity ID: 123" in result.output
+        assert "Total faces: 1" in result.output
+        mock_store_manager.store_client.get_entity_faces.assert_called_once_with(entity_id=123)
+
+    def test_faces_similar(self, mock_store_manager, sample_similar_faces_response):
+        """Test faces similar command."""
+        mock_store_manager.store_client.find_similar_faces.return_value = sample_similar_faces_response
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["faces", "similar", "456", "--limit", "10", "--threshold", "0.7"])
+
+        assert result.exit_code == 0
+        assert "Similar Faces for Face ID: 456" in result.output
+        mock_store_manager.store_client.find_similar_faces.assert_called_once_with(
+            face_id=456,
+            limit=10,
+            threshold=0.7,
+        )
+
+    def test_faces_download_embedding(self, mock_store_manager, tmp_path):
+        """Test faces download-embedding command."""
+        output_file = tmp_path / "face.npy"
+        mock_store_manager.store_client.download_face_embedding.return_value = None
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["faces", "download-embedding", "456", "--output", str(output_file)])
+
+        assert result.exit_code == 0
+        assert "Face embedding downloaded" in result.output
+        mock_store_manager.store_client.download_face_embedding.assert_called_once()
+
+    def test_faces_matches(self, mock_store_manager, sample_face_match):
+        """Test faces matches command."""
+        mock_store_manager.store_client.get_face_matches.return_value = [sample_face_match]
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["faces", "matches", "456"])
+
+        assert result.exit_code == 0
+        assert "Match History for Face ID: 456" in result.output
+        assert "Total matches: 1" in result.output
+        mock_store_manager.store_client.get_face_matches.assert_called_once_with(face_id=456)
+
+    def test_persons_list(self, mock_store_manager, sample_known_person):
+        """Test persons list command."""
+        mock_store_manager.store_client.get_all_known_persons.return_value = [sample_known_person]
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["persons", "list"])
+
+        assert result.exit_code == 0
+        assert "Known Persons" in result.output
+        assert "Total persons: 1" in result.output
+        mock_store_manager.store_client.get_all_known_persons.assert_called_once()
+
+    def test_persons_get(self, mock_store_manager, sample_known_person):
+        """Test persons get command."""
+        mock_store_manager.store_client.get_known_person.return_value = sample_known_person
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["persons", "get", "789"])
+
+        assert result.exit_code == 0
+        assert "Person ID: 789" in result.output
+        mock_store_manager.store_client.get_known_person.assert_called_once_with(person_id=789)
+
+    def test_persons_update(self, mock_store_manager, sample_known_person):
+        """Test persons update command."""
+        mock_store_manager.store_client.update_known_person_name.return_value = sample_known_person
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["persons", "update", "789", "--name", "Jane Doe"])
+
+        assert result.exit_code == 0
+        assert "Updated person 789" in result.output
+        mock_store_manager.store_client.update_known_person_name.assert_called_once_with(
+            person_id=789,
+            name="Jane Doe",
+        )
+
+    def test_persons_faces(self, mock_store_manager, sample_face):
+        """Test persons faces command."""
+        mock_store_manager.store_client.get_known_person_faces.return_value = [sample_face]
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["persons", "faces", "789"])
+
+        assert result.exit_code == 0
+        assert "Faces for Person ID: 789" in result.output
+        assert "Total faces: 1" in result.output
+        mock_store_manager.store_client.get_known_person_faces.assert_called_once_with(person_id=789)
+
+    def test_images_similar(self, mock_store_manager, sample_similar_images_response):
+        """Test images similar command."""
+        mock_store_manager.store_client.find_similar_images.return_value = sample_similar_images_response
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["images", "similar", "123", "--limit", "10", "--threshold", "0.85"])
+
+        assert result.exit_code == 0
+        assert "Similar Images for Entity ID: 123" in result.output
+        assert "Found 2 similar images" in result.output
+        mock_store_manager.store_client.find_similar_images.assert_called_once_with(
+            entity_id=123,
+            limit=10,
+            score_threshold=0.85,
+            include_details=False,
+        )
+
+    def test_images_download_embedding(self, mock_store_manager, tmp_path):
+        """Test images download-embedding command."""
+        output_file = tmp_path / "entity.npy"
+        mock_store_manager.store_client.download_entity_embedding.return_value = None
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["images", "download-embedding", "123", "--output", str(output_file)])
+
+        assert result.exit_code == 0
+        assert "Entity CLIP embedding downloaded" in result.output
+        mock_store_manager.store_client.download_entity_embedding.assert_called_once()

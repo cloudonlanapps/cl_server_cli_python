@@ -7,10 +7,20 @@ import pytest
 
 from cl_client.models import JobResponse
 from cl_client.store_models import (
+    BBox,
     Entity,
+    EntityJobResponse,
     EntityListResponse,
     EntityPagination,
     EntityVersion,
+    FaceMatchResult,
+    FaceResponse,
+    KnownPersonResponse,
+    Landmarks,
+    SimilarFacesResult,
+    SimilarFacesResponse,
+    SimilarImageResult,
+    SimilarImagesResponse,
     StoreConfig,
 )
 
@@ -124,7 +134,23 @@ def mock_store_manager():
         mock_manager.delete_entity = AsyncMock()
         mock_manager.get_versions = AsyncMock()
         mock_manager.get_config = AsyncMock()
-        mock_manager.update_read_auth = AsyncMock()
+        mock_manager.update_guest_mode = AsyncMock()
+
+        # Mock _store_client for database methods
+        mock_store_client = MagicMock()
+        mock_store_client.__aexit__ = AsyncMock(return_value=None)
+        mock_store_client.get_entity_jobs = AsyncMock()
+        mock_store_client.get_entity_faces = AsyncMock()
+        mock_store_client.find_similar_faces = AsyncMock()
+        mock_store_client.download_face_embedding = AsyncMock()
+        mock_store_client.get_face_matches = AsyncMock()
+        mock_store_client.get_all_known_persons = AsyncMock()
+        mock_store_client.get_known_person = AsyncMock()
+        mock_store_client.update_known_person_name = AsyncMock()
+        mock_store_client.get_known_person_faces = AsyncMock()
+        mock_store_client.find_similar_images = AsyncMock()
+        mock_store_client.download_entity_embedding = AsyncMock()
+        mock_manager.store_client = mock_store_client
 
         # Configure the class methods
         mock_manager_class.guest = MagicMock(return_value=mock_manager)
@@ -200,7 +226,109 @@ def sample_versions() -> list[EntityVersion]:
 def sample_store_config() -> StoreConfig:
     """Create a sample store config."""
     return StoreConfig(
-        read_auth_enabled=True,
+        guest_mode=False,
         updated_at=1704067200000,
         updated_by="admin",
+    )
+
+
+@pytest.fixture
+def sample_entity_job() -> EntityJobResponse:
+    """Create a sample entity job response."""
+    return EntityJobResponse(
+        id=1,
+        entity_id=123,
+        job_id="test-job-123",
+        task_type="face_detection",
+        status="completed",
+        created_at=1704067200000,
+        updated_at=1704067300000,
+        completed_at=1704067300000,
+        error_message=None,
+    )
+
+
+@pytest.fixture
+def sample_face() -> FaceResponse:
+    """Create a sample face response."""
+    return FaceResponse(
+        id=456,
+        entity_id=123,
+        bbox=BBox(x1=100, y1=150, x2=300, y2=350),
+        confidence=0.95,
+        landmarks=Landmarks(
+            left_eye=(120, 170),
+            right_eye=(180, 170),
+            nose=(150, 200),
+            mouth_left=(130, 230),
+            mouth_right=(170, 230),
+        ),
+        file_path="/faces/123/456.jpg",
+        created_at=1704067200000,
+        known_person_id=789,
+    )
+
+
+@pytest.fixture
+def sample_face_match() -> FaceMatchResult:
+    """Create a sample face match result."""
+    return FaceMatchResult(
+        id=1,
+        face_id=456,
+        matched_face_id=457,
+        similarity_score=0.92,
+        created_at=1704067200000,
+        matched_face=None,
+    )
+
+
+@pytest.fixture
+def sample_similar_face() -> SimilarFacesResult:
+    """Create a sample similar face result."""
+    return SimilarFacesResult(
+        face_id=457,
+        score=0.88,
+    )
+
+
+@pytest.fixture
+def sample_known_person() -> KnownPersonResponse:
+    """Create a sample known person response."""
+    return KnownPersonResponse(
+        id=789,
+        name="John Doe",
+        created_at=1704067200000,
+        updated_at=1704067300000,
+        face_count=5,
+    )
+
+
+@pytest.fixture
+def sample_similar_image() -> SimilarImageResult:
+    """Create a sample similar image result."""
+    return SimilarImageResult(
+        entity_id=124,
+        score=0.91,
+        entity=None,
+    )
+
+
+@pytest.fixture
+def sample_similar_images_response() -> SimilarImagesResponse:
+    """Create a sample similar images response."""
+    return SimilarImagesResponse(
+        results=[
+            SimilarImageResult(entity_id=124, score=0.91, entity=None),
+            SimilarImageResult(entity_id=125, score=0.87, entity=None),
+        ],
+        query_entity_id=123,
+    )
+
+
+@pytest.fixture
+def sample_similar_faces_response(sample_similar_face: SimilarFacesResult) -> SimilarFacesResponse:
+    """Create a sample similar faces response."""
+    return SimilarFacesResponse(
+        results=[sample_similar_face],
+        query_face_id=456,
     )
