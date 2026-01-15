@@ -1242,7 +1242,7 @@ def clip_embedding():
     help="Download embedding to this file",
 )
 @click.pass_context
-def embed(
+def embed(  # type: ignore[reportRedeclaration]
     ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]
 ):
     """Generate CLIP embedding for an image.
@@ -1840,7 +1840,7 @@ def dino_embedding():
     help="Download output to this file",
 )
 @click.pass_context
-def embed(
+def embed(  # type: ignore[reportRedeclaration]
     ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]
 ):
     """Generate DINO embedding for an image.
