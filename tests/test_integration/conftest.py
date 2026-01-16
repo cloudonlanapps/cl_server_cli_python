@@ -74,51 +74,62 @@ def pytest_configure(config: pytest.Config) -> None:
 # ============================================================================
 
 
+def _compact_output(output: str) -> str:
+    """Compact output for single-line error messages."""
+    try:
+        # Try to parse and re-dump as compact JSON
+        data = json.loads(output)
+        return json.dumps(data, separators=(',', ':'))
+    except Exception:
+        # Fallback to simple newline replacement
+        return output.replace('\n', ' ').strip()
+
+
 def parse_cli_json(result: Result, sdk_model: Type[T]) -> T:
     """Parse CLI JSON output using SDK Pydantic model.
-
+    
     Args:
         result: Click test result from CLI invocation
         sdk_model: SDK Pydantic model class (e.g., EntityListResult, JobResponse)
-
+    
     Returns:
         Validated SDK model instance
-
+    
     Raises:
         AssertionError: If CLI failed or JSON is invalid
-
+    
     Example:
         result = cli_runner.invoke(cli, ["--json", "store", "list"])
         data = parse_cli_json(result, EntityListResult)
         assert data.pagination.page == 1
     """
-    assert result.exit_code == 0, f"CLI failed with exit code {result.exit_code}: {result.output}"
+    assert result.exit_code == 0, f"CLI failed with exit code {result.exit_code}: {_compact_output(result.output)}"
 
     try:
         data = json.loads(result.output)
         return sdk_model(**data)
     except json.JSONDecodeError as e:
-        raise AssertionError(f"Invalid JSON from CLI: {e}\nOutput: {result.output}")
+        raise AssertionError(f"Invalid JSON from CLI: {e} Output: {_compact_output(result.output)}")
     except Exception as e:
-        raise AssertionError(f"JSON validation failed: {e}\nOutput: {result.output}")
+        raise AssertionError(f"JSON validation failed: {e} Output: {_compact_output(result.output)}")
 
 
 def parse_cli_json_list(result: Result, item_model: Type[T]) -> list[T]:
     """Parse CLI JSON output as list of SDK models.
-
+    
     Args:
         result: Click test result from CLI invocation
         item_model: SDK Pydantic model class for list items
-
+    
     Returns:
         List of validated SDK model instances
-
+    
     Example:
         result = cli_runner.invoke(cli, ["--json", "faces", "list", "123"])
         faces = parse_cli_json_list(result, Face)
         assert len(faces) > 0
     """
-    assert result.exit_code == 0, f"CLI failed with exit code {result.exit_code}: {result.output}"
+    assert result.exit_code == 0, f"CLI failed with exit code {result.exit_code}: {_compact_output(result.output)}"
 
     try:
         data = json.loads(result.output)
@@ -126,63 +137,63 @@ def parse_cli_json_list(result: Result, item_model: Type[T]) -> list[T]:
             raise AssertionError(f"Expected list, got {type(data)}")
         return [item_model(**item) for item in data]
     except json.JSONDecodeError as e:
-        raise AssertionError(f"Invalid JSON from CLI: {e}\nOutput: {result.output}")
+        raise AssertionError(f"Invalid JSON from CLI: {e} Output: {_compact_output(result.output)}")
     except Exception as e:
-        raise AssertionError(f"JSON validation failed: {e}\nOutput: {result.output}")
+        raise AssertionError(f"JSON validation failed: {e} Output: {_compact_output(result.output)}")
 
 
 def assert_cli_success(result: Result, expected_message: str | None = None) -> dict:
     """Assert CLI returned success response.
-
+    
     Args:
         result: Click test result
         expected_message: Optional substring to check in success message
-
+    
     Returns:
         Parsed JSON dict
-
+    
     Example:
         result = cli_runner.invoke(cli, ["--json", "store", "delete", "123", "--yes"])
         assert_cli_success(result, "Deleted entity")
     """
-    assert result.exit_code == 0, f"CLI should have succeeded: {result.output}"
+    assert result.exit_code == 0, f"CLI should have succeeded: {_compact_output(result.output)}"
 
     try:
         data = json.loads(result.output)
-        assert "status" in data, f"Missing status in output: {result.output}"
-        assert data["status"] == "success", f"Expected success status: {result.output}"
+        assert "status" in data, f"Missing status in output: {_compact_output(result.output)}"
+        assert data["status"] == "success", f"Expected success status: {_compact_output(result.output)}"
 
         if expected_message:
-            assert "message" in data, f"Missing message in output: {result.output}"
+            assert "message" in data, f"Missing message in output: {_compact_output(result.output)}"
             assert expected_message in data["message"], \
                 f"Expected '{expected_message}' in message: {data['message']}"
 
         return data
     except json.JSONDecodeError as e:
-        raise AssertionError(f"Invalid JSON from CLI: {e}\nOutput: {result.output}")
+        raise AssertionError(f"Invalid JSON from CLI: {e} Output: {_compact_output(result.output)}")
 
 
 def assert_cli_error(result: Result, error_substring: str | None = None) -> dict:
     """Assert CLI returned error response.
-
+    
     Args:
         result: Click test result
         error_substring: Optional substring to check in error message
-
+    
     Returns:
         Parsed JSON dict
-
+    
     Example:
         result = cli_runner.invoke(cli, ["--json", "store", "get", "99999"])
         assert_cli_error(result, "not found")
     """
-    assert result.exit_code != 0, f"CLI should have failed: {result.output}"
+    assert result.exit_code != 0, f"CLI should have failed: {_compact_output(result.output)}"
 
     try:
         data = json.loads(result.output)
-        assert "error" in data, f"Missing error in output: {result.output}"
-        assert "status" in data, f"Missing status in output: {result.output}"
-        assert data["status"] == "failed", f"Expected failed status: {result.output}"
+        assert "error" in data, f"Missing error in output: {_compact_output(result.output)}"
+        assert "status" in data, f"Missing status in output: {_compact_output(result.output)}"
+        assert data["status"] == "failed", f"Expected failed status: {_compact_output(result.output)}"
 
         if error_substring:
             assert error_substring.lower() in data["error"].lower(), \
@@ -190,7 +201,7 @@ def assert_cli_error(result: Result, error_substring: str | None = None) -> dict
 
         return data
     except json.JSONDecodeError as e:
-        raise AssertionError(f"Invalid JSON from CLI: {e}\nOutput: {result.output}")
+        raise AssertionError(f"Invalid JSON from CLI: {e} Output: {_compact_output(result.output)}")
 
 
 # ============================================================================

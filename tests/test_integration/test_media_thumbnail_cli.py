@@ -45,6 +45,8 @@ class TestMediaThumbnailCLI:
                 "media-thumbnail",
                 "generate",
                 str(test_image),
+                "-w", "128",
+                "-h", "128",
             ],
         )
 
@@ -75,6 +77,8 @@ class TestMediaThumbnailCLI:
                 "generate",
                 "--watch",
                 str(test_image),
+                "-w", "128",
+                "-h", "128",
             ],
         )
 
@@ -107,6 +111,8 @@ class TestMediaThumbnailCLI:
                 "media-thumbnail",
                 "generate",
                 str(test_image),
+                "-w", "128",
+                "-h", "128",
                 "--output",
                 str(output_file),
             ],
@@ -140,39 +146,10 @@ class TestMediaThumbnailCLI:
                 "media-thumbnail",
                 "generate",
                 "/nonexistent/file.jpg",
+                "-w", "128",
+                "-h", "128",
             ],
         )
 
         # Validate JSON error response
         assert_cli_error(result)
-
-    def test_thumbnail_generate_with_size(
-        self,
-        cli_runner: CliRunner,
-        cli_env: dict[str, str],
-        test_image: Path,
-    ):
-        """Test media-thumbnail generate with custom size and JSON output."""
-        # Execute CLI command with custom thumbnail size and JSON output
-        result = cli_runner.invoke(
-            cli,
-            [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
-                "--json",
-                "media-thumbnail",
-                "generate",
-                str(test_image),
-                "--size",
-                "256",
-            ],
-        )
-
-        # Parse and validate with SDK JobResponse model
-        job = parse_cli_json(result, JobResponse)
-        assert job.status == "completed"
-        assert job.task_type == "media_thumbnail"

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import NoReturn, Optional
@@ -62,6 +63,49 @@ class CLIException(click.ClickException):
         else:
             # Human mode: just print error message to stderr
             click.echo(f"Error: {self.message}", err=True)
+
+
+class JSONGroup(click.Group):
+    """Custom Click Group to handle exceptions as JSON when --json flag is present."""
+
+    def main(self, *args, **kwargs):
+        # Check for --json flag in args
+        # CliRunner calls main(args=..., standalone_mode=False)
+        cmd_args = kwargs.get("args")
+        
+        # If passed as positional arg (unlikely but possible)
+        if cmd_args is None and len(args) > 0:
+            cmd_args = args[0]
+        
+        # Capture original standalone_mode intent (default is True)
+        # We need to know if we should re-raise or print/exit for non-JSON mode
+        original_standalone_mode = kwargs.get("standalone_mode", True)
+        
+        # Force standalone_mode=False so we can catch exceptions and process them
+        kwargs["standalone_mode"] = False
+
+        try:
+            return super().main(*args, **kwargs)
+        except click.ClickException as e:
+            use_json = False
+            if cmd_args is not None:
+                # Check explicit args
+                use_json = "--json" in cmd_args
+            else:
+                # Fallback to sys.argv (production usage)
+                use_json = "--json" in sys.argv
+            
+            if use_json:
+                error = ErrorResponse(error=str(e), status="failed")
+                click.echo(error.model_dump_json(indent=2))
+                sys.exit(e.exit_code)
+            else:
+                # Revert to original behavior
+                if original_standalone_mode:
+                    e.show()
+                    sys.exit(e.exit_code)
+                else:
+                    raise
 
 
 # ============================================================================
@@ -179,7 +223,7 @@ def print_job_result(ctx: click.Context, job: JobResponse) -> None:
     output_sdk_result(ctx, job)  # Just dump the SDK model!
 
 
-@click.group()
+@click.group(cls=JSONGroup)
 @click.version_option()
 @click.option(
     "--username",
@@ -253,6 +297,11 @@ def cli(
       # Explicit no-auth mode
       cl-client --no-auth hash compute image.jpg
     """
+    # Suppress Rich console output in JSON mode to ensure clean JSON stdout
+    if output_json:
+        global console
+        console = Console(file=open(os.devnull, "w"))
+
     # Store config in context for commands to access
     ctx.ensure_object(dict)
     ctx.obj["username"] = username
@@ -1974,6 +2023,8 @@ def generate_manifest(
                         and "output_path" in final_job.params
                     ):
                         output_path = final_job.params["output_path"]
+                        # For HLS, output_path is a directory, download the manifest
+                        output_path = str(Path(output_path) / "adaptive.m3u8")
                         await client.download_job_file(
                             final_job.job_id, str(output_path), output
                         )
@@ -1993,6 +2044,8 @@ def generate_manifest(
                     print_job_result(ctx, job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]
+                        # For HLS, output_path is a directory, download the manifest
+                        output_path = str(Path(output_path) / "adaptive.m3u8")
                         await client.download_job_file(
                             job.job_id, str(output_path), output
                         )
