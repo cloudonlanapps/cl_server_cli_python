@@ -49,6 +49,8 @@ def mock_compute_client():
         mock_client = MagicMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.close = AsyncMock(return_value=None)
+        mock_client.download_job_file = AsyncMock(return_value=None)
 
         # Mock plugin clients
         mock_client.clip_embedding = MagicMock()

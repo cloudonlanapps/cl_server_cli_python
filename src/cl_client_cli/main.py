@@ -618,6 +618,7 @@ def list_entities(
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             result = await manager.list_entities(
                 page=page,
@@ -677,7 +678,7 @@ def list_entities(
                     json.dump(result.data.model_dump(), f, indent=2, default=str)
                 console.print(f"\n[green]✓ Saved to {output}[/green]")
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -712,6 +713,7 @@ def create_entity(
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             result = await manager.create_entity(
                 label=label,
@@ -750,7 +752,7 @@ def create_entity(
 
             console.print(table)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -782,6 +784,7 @@ def get_entity(
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             result = await manager.read_entity(entity_id=entity_id, version=version)
 
@@ -832,7 +835,7 @@ def get_entity(
                     json.dump(entity.model_dump(), f, indent=2, default=str)
                 console.print(f"\n[green]✓ Saved to {output}[/green]")
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -869,6 +872,7 @@ def update_entity(
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             result = await manager.update_entity(
                 entity_id=entity_id,
@@ -885,7 +889,7 @@ def update_entity(
 
             console.print(f"[green]✓ Updated entity [ID: {entity_id}][/green]")
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -926,6 +930,7 @@ def patch_entity(
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             is_deleted = None
             if soft_delete:
@@ -948,7 +953,7 @@ def patch_entity(
             action = "Deleted" if soft_delete else "Restored" if restore else "Updated"
             console.print(f"[green]✓ {action} entity [ID: {entity_id}][/green]")
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -970,6 +975,7 @@ def delete_entity(ctx: click.Context, entity_id: int, yes: bool):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             # Get entity details first for confirmation
             if not yes:
@@ -998,7 +1004,7 @@ def delete_entity(ctx: click.Context, entity_id: int, yes: bool):
         except click.Abort:
             console.print("[yellow]Deletion cancelled[/yellow]")
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -1023,6 +1029,7 @@ def get_versions(ctx: click.Context, entity_id: int, output: Optional[Path]):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             result = await manager.get_versions(entity_id=entity_id)
 
@@ -1064,7 +1071,7 @@ def get_versions(ctx: click.Context, entity_id: int, output: Optional[Path]):
                     )
                 console.print(f"\n[green]✓ Saved to {output}[/green]")
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -1087,6 +1094,7 @@ def get_entity_jobs(ctx: click.Context, entity_id: int):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             # Access the store client directly for database methods
             jobs = await manager.store_client.get_entity_jobs(entity_id=entity_id)
@@ -1127,7 +1135,7 @@ def get_entity_jobs(ctx: click.Context, entity_id: int):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -1155,6 +1163,7 @@ def get_config(ctx: click.Context):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             result = await manager.get_config()
 
@@ -1180,7 +1189,7 @@ def get_config(ctx: click.Context):
 
             console.print(table)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -1203,6 +1212,7 @@ def set_guest_mode(ctx: click.Context, enabled: bool):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             result = await manager.update_guest_mode(guest_mode=enabled)
 
@@ -1214,7 +1224,7 @@ def set_guest_mode(ctx: click.Context, enabled: bool):
                 f"[green]✓ Guest mode {'enabled' if enabled else 'disabled'}[/green]"
             )
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2105,6 +2115,7 @@ def list_faces(ctx: click.Context, entity_id: int):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             faces = await manager.store_client.get_entity_faces(entity_id=entity_id)
 
@@ -2140,7 +2151,7 @@ def list_faces(ctx: click.Context, entity_id: int):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2169,6 +2180,7 @@ def find_similar_faces(ctx: click.Context, face_id: int, limit: int, threshold: 
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             response = await manager.store_client.find_similar_faces(
                 face_id=face_id,
@@ -2199,7 +2211,7 @@ def find_similar_faces(ctx: click.Context, face_id: int, limit: int, threshold: 
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2226,6 +2238,7 @@ def download_face_embedding(ctx: click.Context, face_id: int, output: Path):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             await manager.store_client.download_face_embedding(
                 face_id=face_id,
@@ -2236,7 +2249,7 @@ def download_face_embedding(ctx: click.Context, face_id: int, output: Path):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2256,6 +2269,7 @@ def get_face_matches(ctx: click.Context, face_id: int):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             matches = await manager.store_client.get_face_matches(face_id=face_id)
 
@@ -2284,7 +2298,7 @@ def get_face_matches(ctx: click.Context, face_id: int):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2312,6 +2326,7 @@ def list_persons(ctx: click.Context):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             persons = await manager.store_client.get_all_known_persons()
 
@@ -2344,7 +2359,7 @@ def list_persons(ctx: click.Context):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2364,6 +2379,7 @@ def get_person(ctx: click.Context, person_id: int):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             person = await manager.store_client.get_known_person(person_id=person_id)
 
@@ -2386,7 +2402,7 @@ def get_person(ctx: click.Context, person_id: int):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2407,6 +2423,7 @@ def update_person(ctx: click.Context, person_id: int, name: str):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             person = await manager.store_client.update_known_person_name(
                 person_id=person_id,
@@ -2419,7 +2436,7 @@ def update_person(ctx: click.Context, person_id: int, name: str):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2439,6 +2456,7 @@ def get_person_faces(ctx: click.Context, person_id: int):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             faces = await manager.store_client.get_known_person_faces(
                 person_id=person_id
@@ -2473,7 +2491,7 @@ def get_person_faces(ctx: click.Context, person_id: int):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2517,6 +2535,7 @@ def find_similar_images(
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             response = await manager.store_client.find_similar_images(
                 entity_id=entity_id,
@@ -2557,7 +2576,7 @@ def find_similar_images(
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
@@ -2584,6 +2603,7 @@ def download_entity_embedding(ctx: click.Context, entity_id: int, output: Path):
 
     async def run():
         manager = await get_store_manager(ctx)
+        await manager.__aenter__()
         try:
             await manager.store_client.download_entity_embedding(
                 entity_id=entity_id,
@@ -2596,7 +2616,7 @@ def download_entity_embedding(ctx: click.Context, entity_id: int, output: Path):
             console.print(f"[red]Error: {e}[/red]")
             sys.exit(1)
         finally:
-            await manager.store_client.__aexit__(None, None, None)
+            await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
             if session:
                 await session.close()
