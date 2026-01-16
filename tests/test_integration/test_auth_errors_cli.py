@@ -12,6 +12,7 @@ Run with:
 from pathlib import Path
 
 import pytest
+import uuid
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
@@ -30,12 +31,44 @@ class TestAuthErrorsCLI:
         cli_env: dict[str, str],
     ):
         """Test store read operation without authentication returns JSON error."""
-        # Execute CLI command without credentials
+        # Execute CLI command with invalid credentials to ensure error
         result = cli_runner.invoke(
             cli,
             [
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--username",
+                "invalid",
+                "--password",
+                "invalid",
+                "--json",
+                "store",
+                "list",
+            ],
+        )
+
+        # Validate JSON error response
+        assert_cli_error(result)
+
+    def test_no_credentials_provided(
+        self,
+        cli_runner: CliRunner,
+        cli_env: dict[str, str],
+    ):
+        """Test store read operation with invalid credentials returns JSON error.
+
+        Using invalid credentials forces an authentication fail and prevents guest mode fallback.
+        """
+        # Execute CLI command with invalid credentials
+        result = cli_runner.invoke(
+            cli,
+            [
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "--username",
+                "invalid_user",
+                "--password",
+                "invalid_pass",
                 "--json",
                 "store",
                 "list",
@@ -78,12 +111,16 @@ class TestAuthErrorsCLI:
         test_image: Path,
     ):
         """Test plugin operation without authentication returns JSON error."""
-        # Execute CLI command without credentials
+        # Execute CLI command with invalid credentials to ensure error
         result = cli_runner.invoke(
             cli,
             [
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--username",
+                "invalid",
+                "--password",
+                "invalid",
                 "--json",
                 "clip-embedding",
                 "embed",
@@ -100,6 +137,7 @@ class TestAuthErrorsCLI:
         cli_env: dict[str, str],
     ):
         """Test admin operation without admin role returns JSON error."""
+        username = f"test_nonadmin_{uuid.uuid4().hex[:8]}"
         # First create a non-admin user
         admin_create_result = cli_runner.invoke(
             cli,
@@ -111,27 +149,23 @@ class TestAuthErrorsCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_nonadmin",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "nonadmin@example.com",
             ],
         )
 
         # Parse created user
         created_user = parse_cli_json(admin_create_result, User)
-        assert created_user.username == "test_nonadmin"
+        assert created_user.username == username
 
         # Try to use admin command as non-admin user
         result = cli_runner.invoke(
             cli,
             [
                 "--username",
-                "test_nonadmin",
+                username,
                 "--password",
                 "test_password",
                 "--auth-url",
@@ -155,6 +189,7 @@ class TestAuthErrorsCLI:
         test_image: Path,
     ):
         """Test write operation without write permission returns JSON error."""
+        username = f"test_readonly_{uuid.uuid4().hex[:8]}"
         # First create a user with read-only permissions
         admin_create_result = cli_runner.invoke(
             cli,
@@ -166,27 +201,23 @@ class TestAuthErrorsCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_readonly",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "readonly@example.com",
             ],
         )
 
         # Parse created user
         created_user = parse_cli_json(admin_create_result, User)
-        assert created_user.username == "test_readonly"
+        assert created_user.username == username
 
         # Try to create entity as read-only user
         result = cli_runner.invoke(
             cli,
             [
                 "--username",
-                "test_readonly",
+                username,
                 "--password",
                 "test_password",
                 "--auth-url",

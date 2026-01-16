@@ -268,89 +268,95 @@ class SyncTestHelper:
         self.store_url = store_url
         self.username = username
         self.password = password
+        self._config = ServerConfig(
+            auth_url=self.auth_url,
+            compute_url=self.compute_url,
+            store_url=self.store_url,
+        )
+
+    async def _get_manager_and_client(self, session: SessionManager):
+        await session.login(self.username, self.password)
+        manager = session.create_store_manager()
+        await manager.__aenter__()
+        compute_client = session.create_compute_client()
+        return manager, compute_client
 
     def create_test_entity(self, label: str, image_path: Path):
         """Create a test entity synchronously."""
 
         async def _create():
-            config = ServerConfig(
-                auth_url=self.auth_url,
-                compute_url=self.compute_url,
-                store_url=self.store_url,
-            )
-            session = SessionManager(server_config=config)
-            await session.login(self.username, self.password)
-
-            manager = session.create_store_manager()
-            await manager.__aenter__()
-
-            result = await manager.create_entity(label=label, image_path=image_path)
-
-            await manager.__aexit__(None, None, None)
-            await session.close()
-
-            return result.data.id if result.is_success and result.data else None
+            session = SessionManager(server_config=self._config)
+            try:
+                manager, _ = await self._get_manager_and_client(session)
+                result = await manager.create_entity(label=label, image_path=image_path)
+                await manager.__aexit__(None, None, None)
+                return result.data.id if result.is_success and result.data else None
+            finally:
+                await session.close()
 
         return asyncio.run(_create())
 
-    def wait_for_faces(self, entity_id: int, max_wait: int = 30):
-        """Wait for face detection to complete and return first face_id.
-
-        Uses pysdk's wait_for_job() to wait for job completion, then polls
-        for results in the database.
-        """
+    def wait_for_faces(self, entity_id: int, max_wait: int = 120):
+        """Wait for face detection and embedding to complete and return first face_id."""
 
         async def _wait():
-            config = ServerConfig(
-                auth_url=self.auth_url,
-                compute_url=self.compute_url,
-                store_url=self.store_url,
-            )
-            session = SessionManager(server_config=config)
-            await session.login(self.username, self.password)
-
-            manager = session.create_store_manager()
-            await manager.__aenter__()
-
-            compute_client = session.create_compute_client()
-
+            session = SessionManager(server_config=self._config)
             try:
+                manager, compute_client = await self._get_manager_and_client(session)
+                
                 # Step 1: Poll to find the face detection job
                 face_job = None
-                for _ in range(10):  # Try for 10 seconds
+                for _ in range(15):  # Try for 15 seconds
                     await asyncio.sleep(1.0)
                     jobs = await manager.store_client.get_entity_jobs(entity_id)
-                    face_detection_jobs = [
-                        j for j in jobs if j.task_type == "face_detection"
-                    ]
+                    face_detection_jobs = [j for j in jobs if j.task_type == "face_detection"]
                     if face_detection_jobs:
                         face_job = face_detection_jobs[0]
                         break
 
                 if face_job is None:
-                    return None  # No job found
+                    print(f"DEBUG: No face detection job found for entity {entity_id}")
+                    return None
 
-                # Step 2: Wait for job completion using pysdk's wait_for_job
-                await compute_client.wait_for_job(
-                    job_id=face_job.job_id,
-                    timeout=30.0,
-                )
+                # Step 2: Wait for detection job completion
+                print(f"DEBUG: Waiting for face detection job {face_job.job_id}")
+                await compute_client.wait_for_job(job_id=face_job.job_id, timeout=60.0)
 
-                # Step 3: Poll for faces to appear in database
+                # Step 3: Wait for face embedding jobs
+                print("DEBUG: Waiting for face embedding jobs...")
+                found_embedding = False
+                for _ in range(30):  # Wait up to 60 seconds
+                    await asyncio.sleep(2.0)
+                    jobs = await manager.store_client.get_entity_jobs(entity_id)
+                    embedding_jobs = [j for j in jobs if j.task_type == "face_embedding"]
+                    if not embedding_jobs:
+                        continue
+                    
+                    statuses = [j.status for j in embedding_jobs]
+                    print(f"DEBUG: Face embedding jobs status: {statuses}")
+                    
+                    if all(s == "completed" for s in statuses):
+                        found_embedding = True
+                        break
+                    if any(s == "failed" for s in statuses):
+                        break
+                
+                if found_embedding:
+                    await asyncio.sleep(2.0) # Indexing time
+
+                # Step 4: Poll for faces to appear in database
                 face_id = None
                 for _ in range(10):  # Try for 10 seconds
                     await asyncio.sleep(1.0)
-                    faces = await manager.store_client.get_entity_faces(
-                        entity_id=entity_id
-                    )
-                    if len(faces) > 0:
+                    faces = await manager.store_client.get_entity_faces(entity_id=entity_id)
+                    if faces:
                         face_id = faces[0].id
                         break
 
                 return face_id
             finally:
-                await compute_client.close()
                 await manager.__aexit__(None, None, None)
+                await compute_client.close()
                 await session.close()
 
         return asyncio.run(_wait())

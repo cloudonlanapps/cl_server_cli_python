@@ -43,6 +43,28 @@ class SuccessResponse(BaseModel):
 
 
 # ============================================================================
+# CLI Exceptions
+# ============================================================================
+
+
+class CLIException(click.ClickException):
+    """Custom exception for CLI errors with support for JSON formatting."""
+
+    def __init__(self, ctx: click.Context, message: str):
+        super().__init__(message)
+        self.ctx = ctx
+
+    def show(self, file: Optional[any] = None) -> None:
+        """Format and display the error message."""
+        error = ErrorResponse(error=self.message)
+        if should_use_json(self.ctx):
+            click.echo(error.model_dump_json(indent=2))
+        else:
+            # Human mode: just print error message to stderr
+            click.echo(f"Error: {self.message}", err=True)
+
+
+# ============================================================================
 # Output Helper Functions
 # ============================================================================
 
@@ -64,19 +86,13 @@ def output_sdk_result(ctx: click.Context, sdk_model: BaseModel) -> None:
 
 
 def output_error(ctx: click.Context, error_message: str) -> NoReturn:
-    """Output CLI error and exit.
+    """Output CLI error via custom exception.
 
     Args:
         ctx: Click context
         error_message: Error message to display
     """
-    error = ErrorResponse(error=error_message)
-    if should_use_json(ctx):
-        click.echo(error.model_dump_json(indent=2))
-    else:
-        # Human mode: just print error message
-        click.echo(f"Error: {error_message}", err=True)
-    sys.exit(1)
+    raise CLIException(ctx, error_message)
 
 
 class JobProgressTracker:
@@ -140,15 +156,17 @@ class JobProgressTracker:
             )
         self.completed.set()
 
-    async def wait(self, timeout: float = 60.0):
+    async def wait(self, timeout: float = 60.0) -> JobResponse:
         """Wait for job completion."""
-        try:
-            await asyncio.wait_for(self.completed.wait(), timeout=timeout)
-            return self.final_job
-        except asyncio.TimeoutError:
-            if not self.use_json:
-                console.print(f"[red]Job {self.job_id} timed out after {timeout}s[/red]")
-            return None
+        start_time = asyncio.get_event_loop().time()
+        while asyncio.get_event_loop().time() - start_time < timeout:
+            if self.completed.is_set():
+                return self.final_job
+            await asyncio.sleep(0.5)
+
+        output_error(
+            ctx=self.ctx, error_message=f"Job {self.job_id} timed out after {timeout}s"
+        )
 
 
 def print_job_result(ctx: click.Context, job: JobResponse) -> None:
@@ -278,8 +296,7 @@ async def get_client(ctx: click.Context) -> ComputeClient:
         return session.create_compute_client()
     except Exception as e:
         await session.close()
-        console.print(f"[red]Authentication failed: {e}[/red]")
-        sys.exit(1)
+        output_error(ctx, f"Authentication failed: {e}")
 
 
 async def get_session_manager(ctx: click.Context) -> SessionManager:
@@ -293,13 +310,10 @@ async def get_session_manager(ctx: click.Context) -> SessionManager:
     server_config = ctx.obj.get("server_config")
 
     if not username or not password:
-        console.print(
-            "[red]Error: Username and password required for this operation[/red]"
+        output_error(
+            ctx,
+            "Username and password required for this operation. Use --username and --password flags or set CL_USERNAME and CL_PASSWORD env vars",
         )
-        console.print(
-            "Use --username and --password flags or set CL_USERNAME and CL_PASSWORD env vars"
-        )
-        sys.exit(1)
 
     session = SessionManager(server_config=server_config)
     try:
@@ -307,8 +321,7 @@ async def get_session_manager(ctx: click.Context) -> SessionManager:
         return session
     except Exception as e:
         await session.close()
-        console.print(f"[red]Authentication failed: {e}[/red]")
-        sys.exit(1)
+        output_error(ctx, f"Authentication failed: {e}")
 
 
 async def get_store_manager(ctx: click.Context):
@@ -335,11 +348,37 @@ async def get_store_manager(ctx: click.Context):
         return session.create_store_manager()
     except Exception as e:
         await session.close()
-        console.print(f"[red]Authentication failed: {e}[/red]")
-        sys.exit(1)
+        output_error(ctx, f"Authentication failed: {e}")
 
 
-@cli.command()
+@click.group()
+@click.pass_context
+def compute(ctx: click.Context):
+    """Manage and monitor compute service."""
+    pass
+
+
+@compute.command("capabilities")
+@click.pass_context
+def compute_capabilities(ctx: click.Context):
+    """Show current worker capabilities and availability."""
+
+    async def run():
+        config = ctx.obj.get("server_config")
+        if not config:
+            output_error(ctx, "Server configuration not found in context.")
+            return
+
+        async with ComputeClient(server_config=config) as client:
+            try:
+                response = await client.get_capabilities()
+                output_sdk_result(ctx, response)
+            except Exception as e:
+                output_error(ctx, str(e))
+
+    asyncio.run(run())
+
+
 @click.argument("job_id", type=str)
 @click.argument("file_path", type=str)
 @click.argument("destination", type=click.Path(path_type=Path), required=False)
@@ -436,6 +475,8 @@ def user_create(
 
             # Output the SDK User model directly
             output_sdk_result(ctx, user)
+        except Exception as e:
+            output_error(ctx, str(e))
         finally:
             await session.close()
 
@@ -464,7 +505,14 @@ def user_list(ctx: click.Context, skip: int, limit: int):
             )
 
             # For lists, output as JSON array directly
-            click.echo(json.dumps([u.model_dump(exclude_none=True) for u in users], indent=2))
+            click.echo(
+                json.dumps(
+                    [u.model_dump(mode="json", exclude_none=True) for u in users],
+                    indent=2,
+                )
+            )
+        except Exception as e:
+            output_error(ctx, str(e))
         finally:
             await session.close()
 
@@ -589,7 +637,9 @@ def user_delete(ctx: click.Context, user_id: int, yes: bool):
             )
 
             # Output success response for void operation
-            success = SuccessResponse(message=f"User '{user.username}' deleted successfully")
+            success = SuccessResponse(
+                message=f"User '{user.username}' deleted successfully"
+            )
             output_sdk_result(ctx, success)
         except click.Abort:
             output_error(ctx, "Deletion cancelled")
@@ -644,7 +694,9 @@ def list_entities(
             )
 
             if result.is_error or result.data is None:
-                output_error(ctx, str(result.error) if result.is_error else "No data returned")
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
 
             # Output SDK EntityListResult model directly
             output_sdk_result(ctx, result.data)
@@ -702,7 +754,9 @@ def create_entity(
             )
 
             if result.is_error or result.data is None:
-                output_error(ctx, str(result.error) if result.is_error else "No data returned")
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
 
             # Output SDK EntityResult model directly
             output_sdk_result(ctx, result.data)
@@ -744,7 +798,9 @@ def get_entity(
             result = await manager.read_entity(entity_id=entity_id, version=version)
 
             if result.is_error or result.data is None:
-                output_error(ctx, str(result.error) if result.is_error else "No data returned")
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
 
             # Output SDK EntityResult model directly
             output_sdk_result(ctx, result.data)
@@ -847,8 +903,7 @@ def patch_entity(
         cl-client store patch 123 --restore
     """
     if soft_delete and restore:
-        console.print("[red]Error: Cannot use both --delete and --restore[/red]")
-        sys.exit(1)
+        output_error(ctx, "Cannot use both --delete and --restore")
 
     async def run():
         manager = await get_store_manager(ctx)
@@ -957,16 +1012,24 @@ def get_versions(ctx: click.Context, entity_id: int, output: Optional[Path]):
             result = await manager.get_versions(entity_id=entity_id)
 
             if result.is_error or result.data is None:
-                output_error(ctx, str(result.error) if result.is_error else "No data returned")
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
 
             # Output SDK list of EntityVersion models as JSON array
-            versions = result.data
-            click.echo(json.dumps([v.model_dump(exclude_none=True) for v in versions], indent=2))
+            click.echo(
+                json.dumps(
+                    [v.model_dump(mode="json", exclude_none=True) for v in result.data],
+                    indent=2,
+                )
+            )
 
             # Save to file if requested
             if output:
                 with open(output, "w") as f:
-                    json.dump([v.model_dump() for v in versions], f, indent=2, default=str)
+                    json.dump(
+                        [v.model_dump() for v in result.data], f, indent=2, default=str
+                    )
                 if not should_use_json(ctx):
                     click.echo(f"Saved to {output}", err=True)
         finally:
@@ -999,7 +1062,12 @@ def get_entity_jobs(ctx: click.Context, entity_id: int):
             jobs = await manager.store_client.get_entity_jobs(entity_id=entity_id)
 
             # Output SDK list of Job models as JSON array
-            click.echo(json.dumps([j.model_dump(exclude_none=True) for j in jobs], indent=2))
+            click.echo(
+                json.dumps(
+                    [j.model_dump(mode="json", exclude_none=True) for j in jobs],
+                    indent=2,
+                )
+            )
         except Exception as e:
             output_error(ctx, str(e))
         finally:
@@ -1036,7 +1104,9 @@ def get_config(ctx: click.Context):
             result = await manager.get_config()
 
             if result.is_error or result.data is None:
-                output_error(ctx, str(result.error) if result.is_error else "No data returned")
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
 
             # Output SDK Config model directly
             output_sdk_result(ctx, result.data)
@@ -1072,7 +1142,9 @@ def set_guest_mode(ctx: click.Context, enabled: bool):
                 output_error(ctx, str(result.error))
 
             # Output success response for void operation
-            success = SuccessResponse(message=f"Guest mode {'enabled' if enabled else 'disabled'}")
+            success = SuccessResponse(
+                message=f"Guest mode {'enabled' if enabled else 'disabled'}"
+            )
             output_sdk_result(ctx, success)
         finally:
             await manager.__aexit__(None, None, None)
@@ -1264,8 +1336,7 @@ def generate(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
-                    console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {final_job.error_message}")
             else:
                 with console.status("[bold green]Generating thumbnail..."):
                     job = await client.media_thumbnail.generate(
@@ -1288,8 +1359,7 @@ def generate(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1308,7 +1378,7 @@ def hash():
     pass
 
 
-@hash.command()
+@hash.command("compute")
 @click.argument("image", type=click.Path(exists=True, path_type=Path))
 @click.option("--watch", is_flag=True, help="Watch progress in real-time")
 @click.option("--timeout", "-t", default=30.0, help="Timeout in seconds")
@@ -1319,7 +1389,7 @@ def hash():
     help="Download hash output to this file",
 )
 @click.pass_context
-def compute(
+def compute_hash(
     ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]
 ):
     """Compute perceptual hash for an image.
@@ -1359,8 +1429,7 @@ def compute(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
-                    console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {final_job.error_message}")
             else:
                 with console.status("[bold green]Computing hash..."):
                     job = await client.hash.compute(
@@ -1381,8 +1450,7 @@ def compute(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1449,8 +1517,7 @@ def extract(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
-                    console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {final_job.error_message}")
             else:
                 with console.status("[bold green]Extracting EXIF..."):
                     job = await client.exif.extract(
@@ -1471,8 +1538,7 @@ def extract(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1539,8 +1605,7 @@ def detect(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
-                    console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {final_job.error_message}")
             else:
                 with console.status("[bold green]Detecting faces..."):
                     job = await client.face_detection.detect(
@@ -1561,8 +1626,7 @@ def detect(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1651,8 +1715,7 @@ def convert(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
-                    console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {final_job.error_message}")
             else:
                 with console.status("[bold green]Converting..."):
                     job = await client.image_conversion.convert(
@@ -1673,8 +1736,7 @@ def convert(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1746,8 +1808,7 @@ def embed(  # type: ignore[reportRedeclaration]
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
-                    console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {final_job.error_message}")
             else:
                 with console.status("[bold green]Processing..."):
                     job = await client.dino_embedding.embed_image(
@@ -1766,8 +1827,7 @@ def embed(  # type: ignore[reportRedeclaration]
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1832,8 +1892,7 @@ def embed(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
-                    console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {final_job.error_message}")
             else:
                 with console.status("[bold green]Processing..."):
                     job = await client.face_embedding.embed_faces(
@@ -1852,8 +1911,7 @@ def embed(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1921,8 +1979,7 @@ def generate_manifest(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 elif final_job:
-                    console.print(f"[red]✗ Failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {final_job.error_message}")
             else:
                 with console.status("[bold green]Generating HLS manifest..."):
                     job = await client.hls_streaming.generate_manifest(
@@ -1941,8 +1998,7 @@ def generate_manifest(
                         )
                         console.print(f"[green]✓ Downloaded to {output}[/green]")
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1978,7 +2034,12 @@ def list_faces(ctx: click.Context, entity_id: int):
             faces = await manager.store_client.get_entity_faces(entity_id=entity_id)
 
             # Output SDK list of Face models as JSON array
-            click.echo(json.dumps([f.model_dump(exclude_none=True) for f in faces], indent=2))
+            click.echo(
+                json.dumps(
+                    [f.model_dump(mode="json", exclude_none=True) for f in faces],
+                    indent=2,
+                )
+            )
         except Exception as e:
             output_error(ctx, str(e))
         finally:
@@ -2088,7 +2149,12 @@ def get_face_matches(ctx: click.Context, face_id: int):
             matches = await manager.store_client.get_face_matches(face_id=face_id)
 
             # Output SDK list of FaceMatch models as JSON array
-            click.echo(json.dumps([m.model_dump(exclude_none=True) for m in matches], indent=2))
+            click.echo(
+                json.dumps(
+                    [m.model_dump(mode="json", exclude_none=True) for m in matches],
+                    indent=2,
+                )
+            )
         except Exception as e:
             output_error(ctx, str(e))
         finally:
@@ -2125,7 +2191,12 @@ def list_persons(ctx: click.Context):
             persons = await manager.store_client.get_all_known_persons()
 
             # Output SDK list of KnownPerson models as JSON array
-            click.echo(json.dumps([p.model_dump(exclude_none=True) for p in persons], indent=2))
+            click.echo(
+                json.dumps(
+                    [p.model_dump(mode="json", exclude_none=True) for p in persons],
+                    indent=2,
+                )
+            )
         except Exception as e:
             output_error(ctx, str(e))
         finally:
@@ -2218,7 +2289,12 @@ def get_person_faces(ctx: click.Context, person_id: int):
             )
 
             # Output SDK list of Face models as JSON array
-            click.echo(json.dumps([f.model_dump(exclude_none=True) for f in faces], indent=2))
+            click.echo(
+                json.dumps(
+                    [f.model_dump(mode="json", exclude_none=True) for f in faces],
+                    indent=2,
+                )
+            )
         except Exception as e:
             output_error(ctx, str(e))
         finally:
@@ -2314,7 +2390,9 @@ def download_entity_embedding(ctx: click.Context, entity_id: int, output: Path):
                 dest=output,
             )
             # Output success response for download operation
-            success = SuccessResponse(message=f"Entity CLIP embedding downloaded to {output}")
+            success = SuccessResponse(
+                message=f"Entity CLIP embedding downloaded to {output}"
+            )
             output_sdk_result(ctx, success)
         except Exception as e:
             output_error(ctx, str(e))
@@ -2325,3 +2403,19 @@ def download_entity_embedding(ctx: click.Context, entity_id: int, output: Path):
                 await session.close()
 
     asyncio.run(run())
+
+
+cli.add_command(compute)
+cli.add_command(store)
+cli.add_command(user)
+cli.add_command(face_detection)
+cli.add_command(image_conversion)
+cli.add_command(dino_embedding)
+cli.add_command(face_embedding)
+cli.add_command(hls_streaming)
+cli.add_command(faces)
+cli.add_command(persons)
+cli.add_command(images)
+
+if __name__ == "__main__":
+    cli()

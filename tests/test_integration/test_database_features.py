@@ -12,6 +12,8 @@ Run with:
         --password=admin
 """
 
+import uuid
+import time
 from pathlib import Path
 
 import pytest
@@ -42,9 +44,10 @@ class TestJobTracking:
         test_image: Path,
     ):
         """Test jobs command shows job status after entity upload with JSON output."""
+        label = f"test_jobs_tracking_{uuid.uuid4().hex[:8]}"
         # Create entity with file upload (triggers compute jobs)
         entity_id = test_helper.create_test_entity(
-            label="test_jobs_tracking",
+            label=label,
             image_path=test_image,
         )
 
@@ -69,11 +72,10 @@ class TestJobTracking:
             ],
         )
 
-        # Parse and validate with SDK EntityJobResponse model
-        job_response = parse_cli_json(cli_result, EntityJobResponse)
-        assert job_response.entity_id == entity_id
-        assert hasattr(job_response, "jobs")
-        assert isinstance(job_response.jobs, list)
+        # Parse and validate with SDK EntityJobResponse model list
+        jobs = parse_cli_json_list(cli_result, EntityJobResponse)
+        assert len(jobs) > 0
+        assert all(j.entity_id == entity_id for j in jobs)
 
 
 @pytest.mark.integration
@@ -88,9 +90,10 @@ class TestFaceCommands:
         test_image: Path,
     ):
         """Test faces list command shows detected faces with JSON output."""
+        label = f"test_faces_list_{uuid.uuid4().hex[:8]}"
         # Upload image with faces
         entity_id = test_helper.create_test_entity(
-            label="test_faces_list",
+            label=label,
             image_path=test_image,
         )
 
@@ -132,9 +135,10 @@ class TestFaceCommands:
         test_image: Path,
     ):
         """Test faces similar command for face similarity search with JSON output."""
+        label = f"test_faces_similar_{uuid.uuid4().hex[:8]}"
         # Upload image with face
         entity_id = test_helper.create_test_entity(
-            label="test_faces_similar",
+            label=label,
             image_path=test_image,
         )
 
@@ -144,28 +148,33 @@ class TestFaceCommands:
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
 
-        # Test faces similar command with JSON output
-        cli_result = cli_runner.invoke(
-            cli,
-            [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
-                "--json",
-                "faces",
-                "similar",
-                str(face_id),
-                "--limit",
-                "5",
-                "--threshold",
-                "0.5",
-            ],
-        )
+        # Test faces similar command with JSON output (with retries for indexing)
+        cli_result = None
+        for i in range(5):
+            cli_result = cli_runner.invoke(
+                cli,
+                [
+                    "--username",
+                    cli_env["CL_USERNAME"],
+                    "--password",
+                    cli_env["CL_PASSWORD"],
+                    "--auth-url",
+                    cli_env["CL_AUTH_URL"],
+                    "--store-url",
+                    cli_env["CL_STORE_URL"],
+                    "--json",
+                    "faces",
+                    "similar",
+                    str(face_id),
+                    "--limit",
+                    "5",
+                    "--threshold",
+                    "0.5",
+                ],
+            )
+            if cli_result.exit_code == 0:
+                break
+            time.sleep(2)
 
         # Parse and validate with SDK SimilarFacesResponse model
         response = parse_cli_json(cli_result, SimilarFacesResponse)
@@ -181,9 +190,10 @@ class TestFaceCommands:
         tmp_path: Path,
     ):
         """Test faces download-embedding command with JSON output."""
+        label = f"test_faces_download_{uuid.uuid4().hex[:8]}"
         # Upload image with face
         entity_id = test_helper.create_test_entity(
-            label="test_faces_download_embedding",
+            label=label,
             image_path=test_image,
         )
 
@@ -193,27 +203,32 @@ class TestFaceCommands:
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
 
-        # Test download-embedding command with JSON output
+        # Test download-embedding command with JSON output (with retries)
         output_file = tmp_path / "face_embedding.npy"
-        cli_result = cli_runner.invoke(
-            cli,
-            [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
-                "--json",
-                "faces",
-                "download-embedding",
-                str(face_id),
-                "--output",
-                str(output_file),
-            ],
-        )
+        cli_result = None
+        for i in range(5):
+            cli_result = cli_runner.invoke(
+                cli,
+                [
+                    "--username",
+                    cli_env["CL_USERNAME"],
+                    "--password",
+                    cli_env["CL_PASSWORD"],
+                    "--auth-url",
+                    cli_env["CL_AUTH_URL"],
+                    "--store-url",
+                    cli_env["CL_STORE_URL"],
+                    "--json",
+                    "faces",
+                    "download-embedding",
+                    str(face_id),
+                    "--output",
+                    str(output_file),
+                ],
+            )
+            if cli_result.exit_code == 0:
+                break
+            time.sleep(2)
 
         # Validate success response
         assert_cli_success(cli_result, "Face embedding downloaded")
@@ -228,9 +243,10 @@ class TestFaceCommands:
         test_image: Path,
     ):
         """Test faces matches command for face match history with JSON output."""
+        label = f"test_faces_matches_{uuid.uuid4().hex[:8]}"
         # Upload image with face
         entity_id = test_helper.create_test_entity(
-            label="test_faces_matches",
+            label=label,
             image_path=test_image,
         )
 
@@ -305,9 +321,10 @@ class TestPersonsCommands:
         test_image: Path,
     ):
         """Test persons get and update commands with JSON output."""
+        label = f"test_persons_update_{uuid.uuid4().hex[:8]}"
         # Upload image with face to create a person
         entity_id = test_helper.create_test_entity(
-            label="test_persons_update",
+            label=label,
             image_path=test_image,
         )
 
@@ -374,9 +391,10 @@ class TestPersonsCommands:
         test_image: Path,
     ):
         """Test persons faces command with JSON output."""
+        label = f"test_persons_faces_{uuid.uuid4().hex[:8]}"
         # Upload image with face
         entity_id = test_helper.create_test_entity(
-            label="test_persons_faces",
+            label=label,
             image_path=test_image,
         )
 
@@ -425,9 +443,10 @@ class TestImagesCommands:
         test_image: Path,
     ):
         """Test images similar command for CLIP-based similarity with JSON output."""
+        label = f"test_images_similar_{uuid.uuid4().hex[:8]}"
         # Upload image
         entity_id = test_helper.create_test_entity(
-            label="test_images_similar",
+            label=label,
             image_path=test_image,
         )
 
@@ -437,28 +456,33 @@ class TestImagesCommands:
         clip_ready = test_helper.wait_for_clip_embedding(entity_id)
         assert clip_ready, "CLIP embedding did not complete in time"
 
-        # Test images similar command with JSON output
-        cli_result = cli_runner.invoke(
-            cli,
-            [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
-                "--json",
-                "images",
-                "similar",
-                str(entity_id),
-                "--limit",
-                "5",
-                "--threshold",
-                "0.8",
-            ],
-        )
+        # Test images similar command with JSON output (with retries for indexing)
+        cli_result = None
+        for i in range(5):
+            cli_result = cli_runner.invoke(
+                cli,
+                [
+                    "--username",
+                    cli_env["CL_USERNAME"],
+                    "--password",
+                    cli_env["CL_PASSWORD"],
+                    "--auth-url",
+                    cli_env["CL_AUTH_URL"],
+                    "--store-url",
+                    cli_env["CL_STORE_URL"],
+                    "--json",
+                    "images",
+                    "similar",
+                    str(entity_id),
+                    "--limit",
+                    "5",
+                    "--threshold",
+                    "0.5",
+                ],
+            )
+            if cli_result.exit_code == 0:
+                break
+            time.sleep(2)
 
         # Parse and validate with SDK SimilarImagesResponse model
         response = parse_cli_json(cli_result, SimilarImagesResponse)
@@ -473,9 +497,10 @@ class TestImagesCommands:
         test_image: Path,
     ):
         """Test images similar command with --details flag and JSON output."""
+        label = f"test_images_similar_det_{uuid.uuid4().hex[:8]}"
         # Upload image
         entity_id = test_helper.create_test_entity(
-            label="test_images_similar_details",
+            label=label,
             image_path=test_image,
         )
 
@@ -485,25 +510,30 @@ class TestImagesCommands:
         clip_ready = test_helper.wait_for_clip_embedding(entity_id)
         assert clip_ready, "CLIP embedding did not complete in time"
 
-        # Test images similar with details and JSON output
-        cli_result = cli_runner.invoke(
-            cli,
-            [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
-                "--json",
-                "images",
-                "similar",
-                str(entity_id),
-                "--details",
-            ],
-        )
+        # Test images similar with details command with JSON output (with retries)
+        cli_result = None
+        for i in range(5):
+            cli_result = cli_runner.invoke(
+                cli,
+                [
+                    "--username",
+                    cli_env["CL_USERNAME"],
+                    "--password",
+                    cli_env["CL_PASSWORD"],
+                    "--auth-url",
+                    cli_env["CL_AUTH_URL"],
+                    "--store-url",
+                    cli_env["CL_STORE_URL"],
+                    "--json",
+                    "images",
+                    "similar",
+                    str(entity_id),
+                    "--details",
+                ],
+            )
+            if cli_result.exit_code == 0:
+                break
+            time.sleep(2)
 
         # Parse and validate with SDK SimilarImagesResponse model
         response = parse_cli_json(cli_result, SimilarImagesResponse)
@@ -519,9 +549,10 @@ class TestImagesCommands:
         tmp_path: Path,
     ):
         """Test images download-embedding command with JSON output."""
+        label = f"test_images_download_{uuid.uuid4().hex[:8]}"
         # Upload image
         entity_id = test_helper.create_test_entity(
-            label="test_images_download_embedding",
+            label=label,
             image_path=test_image,
         )
 

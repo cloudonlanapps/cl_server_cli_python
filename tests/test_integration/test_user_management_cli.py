@@ -9,6 +9,7 @@ Run with:
         --password=admin
 """
 
+import uuid
 import pytest
 from click.testing import CliRunner
 
@@ -27,6 +28,7 @@ class TestUserManagementCLI:
         cli_env: dict[str, str],
     ):
         """Test user create command with JSON output."""
+        username = f"test_user_create_{uuid.uuid4().hex[:8]}"
         # Execute CLI command to create a user
         result = cli_runner.invoke(
             cli,
@@ -38,20 +40,16 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_user_create",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "test@example.com",
             ],
         )
 
         # Parse and validate with SDK User model
         user = parse_cli_json(result, User)
-        assert user.username == "test_user_create"
+        assert user.username == username
         assert user.id is not None
 
     def test_user_list(
@@ -71,7 +69,7 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "list",
             ],
         )
@@ -87,6 +85,7 @@ class TestUserManagementCLI:
         cli_env: dict[str, str],
     ):
         """Test user get command with JSON output."""
+        username = f"test_user_get_{uuid.uuid4().hex[:8]}"
         # First create a user to get
         create_result = cli_runner.invoke(
             cli,
@@ -98,14 +97,10 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_user_get",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "test_get@example.com",
             ],
         )
 
@@ -124,7 +119,7 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "get",
                 str(user_id),
             ],
@@ -133,7 +128,7 @@ class TestUserManagementCLI:
         # Parse and validate with SDK User model
         user = parse_cli_json(result, User)
         assert user.id == user_id
-        assert user.username == "test_user_get"
+        assert user.username == username
 
     def test_user_update(
         self,
@@ -141,6 +136,7 @@ class TestUserManagementCLI:
         cli_env: dict[str, str],
     ):
         """Test user update command with JSON output."""
+        username = f"test_user_update_{uuid.uuid4().hex[:8]}"
         # First create a user to update
         create_result = cli_runner.invoke(
             cli,
@@ -152,14 +148,10 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_user_update",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "test_update@example.com",
             ],
         )
 
@@ -178,11 +170,10 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "update",
                 str(user_id),
-                "--email",
-                "updated@example.com",
+                "--active",  # Changed from --email
             ],
         )
 
@@ -196,6 +187,7 @@ class TestUserManagementCLI:
         cli_env: dict[str, str],
     ):
         """Test user delete command with JSON output."""
+        username = f"test_user_delete_{uuid.uuid4().hex[:8]}"
         # First create a user to delete
         create_result = cli_runner.invoke(
             cli,
@@ -207,14 +199,10 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_user_delete",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "test_delete@example.com",
             ],
         )
 
@@ -233,7 +221,7 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "delete",
                 str(user_id),
                 "--yes",  # Auto-confirm
@@ -249,6 +237,7 @@ class TestUserManagementCLI:
         cli_env: dict[str, str],
     ):
         """Test user permissions list command with JSON output."""
+        username = f"test_user_perms_{uuid.uuid4().hex[:8]}"
         # First create a user
         create_result = cli_runner.invoke(
             cli,
@@ -260,14 +249,10 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_user_perms",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "test_perms@example.com",
             ],
         )
 
@@ -286,9 +271,8 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
-                "permissions",
-                "list",
+                "user",
+                "update",  # user permissions list doesn't exist, it's just user get
                 str(user_id),
             ],
         )
@@ -298,12 +282,13 @@ class TestUserManagementCLI:
         assert user.id == user_id
         assert hasattr(user, "permissions")
 
-    def test_user_permissions_add(
+    def test_user_permissions_update(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test user permissions add command with JSON output."""
+        """Test user permissions update command with JSON output."""
+        username = f"test_user_perms_upd_{uuid.uuid4().hex[:8]}"
         # First create a user
         create_result = cli_runner.invoke(
             cli,
@@ -315,14 +300,10 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_user_add_perm",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "test_add_perm@example.com",
             ],
         )
 
@@ -330,7 +311,7 @@ class TestUserManagementCLI:
         created_user = parse_cli_json(create_result, User)
         user_id = created_user.id
 
-        # Test add permission command
+        # Test update permissions
         result = cli_runner.invoke(
             cli,
             [
@@ -341,26 +322,26 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
-                "permissions",
-                "add",
+                "user",
+                "update",
                 str(user_id),
-                "--permission",
-                "read",
+                "--permissions",
+                "read:jobs",
             ],
         )
 
         # Parse and validate user with added permission
         user = parse_cli_json(result, User)
         assert user.id == user_id
-        assert "read" in user.permissions
+        assert "read:jobs" in user.permissions
 
     def test_user_permissions_remove(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test user permissions remove command with JSON output."""
+        """Test user permissions removal via update with JSON output."""
+        username = f"test_user_rem_perm_{uuid.uuid4().hex[:8]}"
         # First create a user
         create_result = cli_runner.invoke(
             cli,
@@ -372,44 +353,21 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
+                "user",
                 "create",
-                "--username",
-                "test_user_remove_perm",
-                "--password",
+                username,
                 "test_password",
-                "--email",
-                "test_remove_perm@example.com",
+                "--permissions",
+                "write:jobs",
             ],
         )
 
         # Parse created user to get ID
         created_user = parse_cli_json(create_result, User)
         user_id = created_user.id
+        assert "write:jobs" in created_user.permissions
 
-        # First add a permission
-        add_result = cli_runner.invoke(
-            cli,
-            [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--json",
-                "users",
-                "permissions",
-                "add",
-                str(user_id),
-                "--permission",
-                "write",
-            ],
-        )
-
-        assert add_result.exit_code == 0, f"Add permission failed: {add_result.output}"
-
-        # Test remove permission command
+        # Test remove permission command (by updating with empty permissions)
         result = cli_runner.invoke(
             cli,
             [
@@ -420,16 +378,16 @@ class TestUserManagementCLI:
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
                 "--json",
-                "users",
-                "permissions",
-                "remove",
+                "user",
+                "update",
                 str(user_id),
-                "--permission",
-                "write",
+                "--permissions",
+                "read:jobs",  # Replaces write:jobs
             ],
         )
 
         # Parse and validate user with permission removed
         user = parse_cli_json(result, User)
         assert user.id == user_id
-        assert "write" not in user.permissions
+        assert "write:jobs" not in user.permissions
+        assert "read:jobs" in user.permissions
