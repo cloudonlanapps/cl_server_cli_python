@@ -14,7 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client import SessionManager, ServerConfig
-from cl_client_cli.main import cli
+
 
 # ============================================================================
 # CLI OPTIONS
@@ -27,31 +27,31 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--auth-url",
         action="store",
         default="http://localhost:8010",
-        help="Auth service URL (default: http://localhost:8010)"
+        help="Auth service URL (default: http://localhost:8010)",
     )
     parser.addoption(
         "--compute-url",
         action="store",
         default="http://localhost:8012",
-        help="Compute service URL (default: http://localhost:8012)"
+        help="Compute service URL (default: http://localhost:8012)",
     )
     parser.addoption(
         "--store-url",
         action="store",
         default="http://localhost:8011",
-        help="Store service URL (default: http://localhost:8011)"
+        help="Store service URL (default: http://localhost:8011)",
     )
     parser.addoption(
         "--username",
         action="store",
         default=None,
-        help="Username for authenticated integration tests"
+        help="Username for authenticated integration tests",
     )
     parser.addoption(
         "--password",
         action="store",
         default=None,
-        help="Password for authenticated integration tests"
+        help="Password for authenticated integration tests",
     )
 
 
@@ -125,7 +125,14 @@ class SyncTestHelper:
     with the CLI's asyncio.run() calls.
     """
 
-    def __init__(self, auth_url: str, compute_url: str, store_url: str, username: str, password: str):
+    def __init__(
+        self,
+        auth_url: str,
+        compute_url: str,
+        store_url: str,
+        username: str,
+        password: str,
+    ):
         self.auth_url = auth_url
         self.compute_url = compute_url
         self.store_url = store_url
@@ -134,6 +141,7 @@ class SyncTestHelper:
 
     def create_test_entity(self, label: str, image_path: Path):
         """Create a test entity synchronously."""
+
         async def _create():
             config = ServerConfig(
                 auth_url=self.auth_url,
@@ -151,7 +159,7 @@ class SyncTestHelper:
             await manager.__aexit__(None, None, None)
             await session.close()
 
-            return result.data.id if result.is_success else None
+            return result.data.id if result.is_success and result.data else None
 
         return asyncio.run(_create())
 
@@ -161,6 +169,7 @@ class SyncTestHelper:
         Uses pysdk's wait_for_job() to wait for job completion, then polls
         for results in the database.
         """
+
         async def _wait():
             config = ServerConfig(
                 auth_url=self.auth_url,
@@ -181,7 +190,9 @@ class SyncTestHelper:
                 for _ in range(10):  # Try for 10 seconds
                     await asyncio.sleep(1.0)
                     jobs = await manager.store_client.get_entity_jobs(entity_id)
-                    face_detection_jobs = [j for j in jobs if j.task_type == "face_detection"]
+                    face_detection_jobs = [
+                        j for j in jobs if j.task_type == "face_detection"
+                    ]
                     if face_detection_jobs:
                         face_job = face_detection_jobs[0]
                         break
@@ -199,7 +210,9 @@ class SyncTestHelper:
                 face_id = None
                 for _ in range(10):  # Try for 10 seconds
                     await asyncio.sleep(1.0)
-                    faces = await manager.store_client.get_entity_faces(entity_id=entity_id)
+                    faces = await manager.store_client.get_entity_faces(
+                        entity_id=entity_id
+                    )
                     if len(faces) > 0:
                         face_id = faces[0].id
                         break
@@ -217,6 +230,7 @@ class SyncTestHelper:
 
         Waits for face detection, then face embedding, then person creation.
         """
+
         async def _wait():
             config = ServerConfig(
                 auth_url=self.auth_url,
@@ -237,7 +251,9 @@ class SyncTestHelper:
                 for _ in range(10):
                     await asyncio.sleep(1.0)
                     jobs = await manager.store_client.get_entity_jobs(entity_id)
-                    face_detection_jobs = [j for j in jobs if j.task_type == "face_detection"]
+                    face_detection_jobs = [
+                        j for j in jobs if j.task_type == "face_detection"
+                    ]
                     if face_detection_jobs:
                         face_job = face_detection_jobs[0]
                         break
@@ -251,17 +267,23 @@ class SyncTestHelper:
                 for _ in range(20):  # Try for 40 seconds
                     await asyncio.sleep(2.0)
                     jobs = await manager.store_client.get_entity_jobs(entity_id)
-                    face_embedding_jobs = [j for j in jobs if j.task_type == "face_embedding"]
+                    face_embedding_jobs = [
+                        j for j in jobs if j.task_type == "face_embedding"
+                    ]
 
                     # Check if all embedding jobs are completed
-                    if face_embedding_jobs and all(j.status == "completed" for j in face_embedding_jobs):
+                    if face_embedding_jobs and all(
+                        j.status == "completed" for j in face_embedding_jobs
+                    ):
                         break
 
                 # Step 3: Poll for person_id to appear
                 person_id = None
                 for _ in range(10):  # Try for 10 seconds
                     await asyncio.sleep(1.0)
-                    faces = await manager.store_client.get_entity_faces(entity_id=entity_id)
+                    faces = await manager.store_client.get_entity_faces(
+                        entity_id=entity_id
+                    )
                     if len(faces) > 0 and faces[0].known_person_id is not None:
                         person_id = faces[0].known_person_id
                         break
@@ -279,6 +301,7 @@ class SyncTestHelper:
 
         Returns True if embedding is ready, False otherwise.
         """
+
         async def _wait():
             config = ServerConfig(
                 auth_url=self.auth_url,
@@ -323,7 +346,9 @@ class SyncTestHelper:
 
 
 @pytest.fixture
-def test_helper(auth_url: str, compute_url: str, store_url: str, username: str, password: str):
+def test_helper(
+    auth_url: str, compute_url: str, store_url: str, username: str, password: str
+) -> SyncTestHelper:
     """Synchronous test helper for integration tests."""
     return SyncTestHelper(auth_url, compute_url, store_url, username, password)
 
@@ -340,7 +365,9 @@ def cli_runner():
 
 
 @pytest.fixture
-def cli_env(auth_url: str, compute_url: str, store_url: str, username: str, password: str):
+def cli_env(
+    auth_url: str, compute_url: str, store_url: str, username: str, password: str
+):
     """Environment variables for CLI commands."""
     return {
         "CL_AUTH_URL": auth_url,

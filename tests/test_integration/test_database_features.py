@@ -12,13 +12,14 @@ Run with:
         --password=admin
 """
 
-import time
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
+
+from .conftest import SyncTestHelper
 
 
 @pytest.mark.integration
@@ -28,8 +29,8 @@ class TestJobTracking:
     def test_jobs_command_after_upload(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test jobs command shows job status after entity upload."""
@@ -45,9 +46,19 @@ class TestJobTracking:
         # No need to wait since we're just checking if the command works
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "store", "jobs", str(entity_id)],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "jobs",
+                str(entity_id),
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -62,8 +73,8 @@ class TestFaceCommands:
     def test_faces_list_command(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test faces list command shows detected faces."""
@@ -82,9 +93,19 @@ class TestFaceCommands:
         # Test faces list command
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "faces", "list", str(entity_id)],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "faces",
+                "list",
+                str(entity_id),
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -94,8 +115,8 @@ class TestFaceCommands:
     def test_faces_similar_command(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test faces similar command for face similarity search."""
@@ -110,14 +131,27 @@ class TestFaceCommands:
         # Wait for face detection and embedding
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
-        if False:
 
         # Test faces similar command
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "faces", "similar", str(face_id), "--limit", "5", "--threshold", "0.5"],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "faces",
+                "similar",
+                str(face_id),
+                "--limit",
+                "5",
+                "--threshold",
+                "0.5",
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -128,8 +162,8 @@ class TestFaceCommands:
     def test_faces_download_embedding(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
         tmp_path: Path,
     ):
@@ -145,15 +179,26 @@ class TestFaceCommands:
         # Wait for face detection and embedding
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
-        if False:
 
         # Test download-embedding command
         output_file = tmp_path / "face_embedding.npy"
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "faces", "download-embedding", str(face_id), "--output", str(output_file)],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "faces",
+                "download-embedding",
+                str(face_id),
+                "--output",
+                str(output_file),
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -164,8 +209,8 @@ class TestFaceCommands:
     def test_faces_matches_command(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test faces matches command for face match history."""
@@ -180,14 +225,23 @@ class TestFaceCommands:
         # Wait for face detection
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
-        if False:
 
         # Test matches command
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "faces", "matches", str(face_id)],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "faces",
+                "matches",
+                str(face_id),
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -202,14 +256,23 @@ class TestPersonsCommands:
     def test_persons_list_command(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
+        cli_env: dict[str, str],
     ):
         """Test persons list command."""
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "persons", "list"],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "persons",
+                "list",
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -219,8 +282,8 @@ class TestPersonsCommands:
     def test_persons_get_update_commands(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test persons get and update commands."""
@@ -239,9 +302,19 @@ class TestPersonsCommands:
         # Test persons get command
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "persons", "get", str(person_id)],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "persons",
+                "get",
+                str(person_id),
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -251,9 +324,21 @@ class TestPersonsCommands:
         # Test persons update command
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "persons", "update", str(person_id), "--name", "Test Person"],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "persons",
+                "update",
+                str(person_id),
+                "--name",
+                "Test Person",
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -263,8 +348,8 @@ class TestPersonsCommands:
     def test_persons_faces_command(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test persons faces command."""
@@ -283,9 +368,19 @@ class TestPersonsCommands:
         # Test persons faces command
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "persons", "faces", str(person_id)],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "persons",
+                "faces",
+                str(person_id),
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -300,8 +395,8 @@ class TestImagesCommands:
     def test_images_similar_command(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test images similar command for CLIP-based similarity."""
@@ -320,9 +415,23 @@ class TestImagesCommands:
         # Test images similar command
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "images", "similar", str(entity_id), "--limit", "5", "--threshold", "0.8"],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "images",
+                "similar",
+                str(entity_id),
+                "--limit",
+                "5",
+                "--threshold",
+                "0.8",
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -333,8 +442,8 @@ class TestImagesCommands:
     def test_images_similar_with_details(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test images similar command with --details flag."""
@@ -349,14 +458,24 @@ class TestImagesCommands:
         # Wait for CLIP embedding using pysdk's wait_for_job
         clip_ready = test_helper.wait_for_clip_embedding(entity_id)
         assert clip_ready, "CLIP embedding did not complete in time"
-        if False:
 
         # Test images similar with details
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "images", "similar", str(entity_id), "--details"],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "images",
+                "similar",
+                str(entity_id),
+                "--details",
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
@@ -365,8 +484,8 @@ class TestImagesCommands:
     def test_images_download_embedding(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
         tmp_path: Path,
     ):
@@ -382,15 +501,26 @@ class TestImagesCommands:
         # Wait for CLIP embedding using pysdk's wait_for_job
         clip_ready = test_helper.wait_for_clip_embedding(entity_id)
         assert clip_ready, "CLIP embedding did not complete in time"
-        if False:
 
         # Test download-embedding command
         output_file = tmp_path / "clip_embedding.npy"
         cli_result = cli_runner.invoke(
             cli,
-            ["--username", cli_env["CL_USERNAME"], "--password", cli_env["CL_PASSWORD"],
-             "--auth-url", cli_env["CL_AUTH_URL"], "--store-url", cli_env["CL_STORE_URL"],
-             "images", "download-embedding", str(entity_id), "--output", str(output_file)],
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "images",
+                "download-embedding",
+                str(entity_id),
+                "--output",
+                str(output_file),
+            ],
         )
 
         assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"

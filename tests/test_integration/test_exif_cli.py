@@ -24,7 +24,7 @@ class TestExifCLI:
     def test_exif_extract_http_polling(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
+        cli_env: dict[str, str],
         test_image: Path,
     ):
         """Test exif extract with HTTP polling (default behavior)."""
@@ -32,10 +32,15 @@ class TestExifCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--compute-url", cli_env["CL_COMPUTE_URL"],
-                "exif", "extract", str(test_image),
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--compute-url",
+                cli_env["CL_COMPUTE_URL"],
+                "exif",
+                "extract",
+                str(test_image),
             ],
         )
 
@@ -43,12 +48,16 @@ class TestExifCLI:
         assert result.exit_code == 0, f"CLI failed: {result.output}"
         assert "completed" in result.output.lower() or "✓" in result.output
         # Should show job ID in output
-        assert "test-job" in result.output or "job_id" in result.output.lower() or len(result.output) > 0
+        assert (
+            "test-job" in result.output
+            or "job_id" in result.output.lower()
+            or len(result.output) > 0
+        )
 
     def test_exif_extract_mqtt_callbacks(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
+        cli_env: dict[str, str],
         test_image: Path,
     ):
         """Test exif extract with MQTT callbacks (--watch flag)."""
@@ -56,10 +65,14 @@ class TestExifCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--compute-url", cli_env["CL_COMPUTE_URL"],
-                "exif", "extract",
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--compute-url",
+                cli_env["CL_COMPUTE_URL"],
+                "exif",
+                "extract",
                 "--watch",
                 str(test_image),
             ],
@@ -72,7 +85,7 @@ class TestExifCLI:
     def test_exif_extract_with_output(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
+        cli_env: dict[str, str],
         test_image: Path,
         tmp_path: Path,
     ):
@@ -83,12 +96,17 @@ class TestExifCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--compute-url", cli_env["CL_COMPUTE_URL"],
-                "exif", "extract",
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--compute-url",
+                cli_env["CL_COMPUTE_URL"],
+                "exif",
+                "extract",
                 str(test_image),
-                "--output", str(output_file),
+                "--output",
+                str(output_file),
             ],
         )
 
@@ -102,17 +120,21 @@ class TestExifCLI:
     def test_exif_extract_invalid_file(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
+        cli_env: dict[str, str],
     ):
         """Test exif extract with missing file."""
         # Execute CLI command with non-existent file
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--compute-url", cli_env["CL_COMPUTE_URL"],
-                "exif", "extract",
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--compute-url",
+                cli_env["CL_COMPUTE_URL"],
+                "exif",
+                "extract",
                 "/nonexistent/file.jpg",
             ],
         )
@@ -120,4 +142,8 @@ class TestExifCLI:
         # Should fail with non-zero exit code
         assert result.exit_code != 0, "Command should fail for missing file"
         # Should show error message
-        assert "error" in result.output.lower() or "not found" in result.output.lower() or "does not exist" in result.output.lower()
+        assert (
+            "error" in result.output.lower()
+            or "not found" in result.output.lower()
+            or "does not exist" in result.output.lower()
+        )

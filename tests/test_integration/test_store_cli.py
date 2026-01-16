@@ -15,6 +15,7 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
+from .conftest import SyncTestHelper
 
 
 @pytest.mark.integration
@@ -24,7 +25,7 @@ class TestStoreCLI:
     def test_store_create_and_get(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
+        cli_env: dict[str, str],
         test_image: Path,
     ):
         """Test store create and get commands with real file."""
@@ -32,13 +33,20 @@ class TestStoreCLI:
         create_result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--auth-url", cli_env["CL_AUTH_URL"],
-                "--store-url", cli_env["CL_STORE_URL"],
-                "store", "create",
-                "--label", "test_store_create",
-                "--file", str(test_image),
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "create",
+                "--label",
+                "test_store_create",
+                "--file",
+                str(test_image),
             ],
         )
 
@@ -53,22 +61,31 @@ class TestStoreCLI:
             if "id" in line.lower() and any(char.isdigit() for char in line):
                 # Extract number from line
                 import re
-                numbers = re.findall(r'\d+', line)
+
+                numbers = re.findall(r"\d+", line)
                 if numbers:
                     entity_id = numbers[0]
                     break
 
-        assert entity_id is not None, f"Could not extract entity ID from output: {create_result.output}"
+        assert (
+            entity_id is not None
+        ), f"Could not extract entity ID from output: {create_result.output}"
 
         # Get the created entity
         get_result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--auth-url", cli_env["CL_AUTH_URL"],
-                "--store-url", cli_env["CL_STORE_URL"],
-                "store", "get", entity_id,
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "get",
+                entity_id,
             ],
         )
 
@@ -79,19 +96,26 @@ class TestStoreCLI:
     def test_store_list(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
+        cli_env: dict[str, str],
     ):
         """Test store list command with real data."""
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--auth-url", cli_env["CL_AUTH_URL"],
-                "--store-url", cli_env["CL_STORE_URL"],
-                "store", "list",
-                "--page", "1",
-                "--page-size", "10",
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "list",
+                "--page",
+                "1",
+                "--page-size",
+                "10",
             ],
         )
 
@@ -101,8 +125,8 @@ class TestStoreCLI:
     def test_store_update(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test store update command."""
@@ -118,12 +142,19 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--auth-url", cli_env["CL_AUTH_URL"],
-                "--store-url", cli_env["CL_STORE_URL"],
-                "store", "update", str(entity_id),
-                "--label", "test_store_update_after",
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "update",
+                str(entity_id),
+                "--label",
+                "test_store_update_after",
             ],
         )
 
@@ -134,8 +165,8 @@ class TestStoreCLI:
     def test_store_patch(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test store patch command."""
@@ -151,23 +182,34 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--auth-url", cli_env["CL_AUTH_URL"],
-                "--store-url", cli_env["CL_STORE_URL"],
-                "store", "patch", str(entity_id),
-                "--label", "test_store_patched",
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "patch",
+                str(entity_id),
+                "--label",
+                "test_store_patched",
             ],
         )
 
         assert result.exit_code == 0, f"Patch failed: {result.output}"
-        assert "patched" in result.output.lower() or "updated" in result.output.lower() or "✓" in result.output
+        assert (
+            "patched" in result.output.lower()
+            or "updated" in result.output.lower()
+            or "✓" in result.output
+        )
 
     def test_store_delete(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test store delete command."""
@@ -183,11 +225,17 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--auth-url", cli_env["CL_AUTH_URL"],
-                "--store-url", cli_env["CL_STORE_URL"],
-                "store", "delete", str(entity_id),
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "delete",
+                str(entity_id),
                 "--yes",  # Auto-confirm
             ],
         )
@@ -198,8 +246,8 @@ class TestStoreCLI:
     def test_store_versions(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
-        test_helper,
+        cli_env: dict[str, str],
+        test_helper: SyncTestHelper,
         test_image: Path,
     ):
         """Test store versions command."""
@@ -215,11 +263,17 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--auth-url", cli_env["CL_AUTH_URL"],
-                "--store-url", cli_env["CL_STORE_URL"],
-                "store", "versions", str(entity_id),
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "versions",
+                str(entity_id),
             ],
         )
 
@@ -229,17 +283,23 @@ class TestStoreCLI:
     def test_store_admin_config(
         self,
         cli_runner: CliRunner,
-        cli_env: dict,
+        cli_env: dict[str, str],
     ):
         """Test store admin config command."""
         result = cli_runner.invoke(
             cli,
             [
-                "--username", cli_env["CL_USERNAME"],
-                "--password", cli_env["CL_PASSWORD"],
-                "--auth-url", cli_env["CL_AUTH_URL"],
-                "--store-url", cli_env["CL_STORE_URL"],
-                "store", "admin", "config",
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--auth-url",
+                cli_env["CL_AUTH_URL"],
+                "--store-url",
+                cli_env["CL_STORE_URL"],
+                "store",
+                "admin",
+                "config",
             ],
         )
 
