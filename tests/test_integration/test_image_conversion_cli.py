@@ -35,12 +35,6 @@ class TestImageConversionCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "image-conversion",
                 "convert",
@@ -48,6 +42,7 @@ class TestImageConversionCLI:
                 "--format",
                 "png",
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -66,12 +61,6 @@ class TestImageConversionCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "image-conversion",
                 "convert",
@@ -80,6 +69,7 @@ class TestImageConversionCLI:
                 "--format",
                 "png",
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -101,12 +91,6 @@ class TestImageConversionCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "image-conversion",
                 "convert",
@@ -116,6 +100,7 @@ class TestImageConversionCLI:
                 "--output",
                 str(output_file),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -136,12 +121,6 @@ class TestImageConversionCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "image-conversion",
                 "convert",
@@ -149,6 +128,7 @@ class TestImageConversionCLI:
                 "--format",
                 "png",
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response
@@ -165,12 +145,6 @@ class TestImageConversionCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "image-conversion",
                 "convert",
@@ -178,6 +152,7 @@ class TestImageConversionCLI:
                 "--format",
                 "webp",
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model

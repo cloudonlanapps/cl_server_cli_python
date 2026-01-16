@@ -35,16 +35,11 @@ class TestAuthErrorsCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--store-url",
-                cli_env["CL_STORE_URL"],
-                "--username",
-                "invalid",
-                "--password",
-                "invalid",
                 "--json",
                 "store",
                 "list",
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response
@@ -63,8 +58,6 @@ class TestAuthErrorsCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--username",
                 "invalid_user",
                 "--password",
@@ -73,6 +66,7 @@ class TestAuthErrorsCLI:
                 "store",
                 "list",
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response
@@ -89,8 +83,6 @@ class TestAuthErrorsCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "create",
@@ -99,6 +91,7 @@ class TestAuthErrorsCLI:
                 "--file",
                 str(test_image),
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response
@@ -115,8 +108,6 @@ class TestAuthErrorsCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--username",
                 "invalid",
                 "--password",
@@ -126,6 +117,7 @@ class TestAuthErrorsCLI:
                 "embed",
                 str(test_image),
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response
@@ -142,18 +134,13 @@ class TestAuthErrorsCLI:
         admin_create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
                 username,
                 "test_password",
             ],
+            env=cli_env,
         )
 
         # Parse created user
@@ -168,15 +155,12 @@ class TestAuthErrorsCLI:
                 username,
                 "--password",
                 "test_password",
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "admin",
                 "config",
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response
@@ -194,18 +178,13 @@ class TestAuthErrorsCLI:
         admin_create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
                 username,
                 "test_password",
             ],
+            env=cli_env,
         )
 
         # Parse created user
@@ -220,10 +199,6 @@ class TestAuthErrorsCLI:
                 username,
                 "--password",
                 "test_password",
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "create",
@@ -232,6 +207,7 @@ class TestAuthErrorsCLI:
                 "--file",
                 str(test_image),
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response
@@ -247,15 +223,12 @@ class TestAuthErrorsCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "admin",
                 "config",
             ],
+            env=cli_env,
         )
 
         # In guest mode, should succeed or fail depending on configuration

@@ -33,18 +33,13 @@ class TestUserManagementCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
                 username,
                 "test_password",
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK User model
@@ -62,16 +57,11 @@ class TestUserManagementCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "list",
             ],
+            env=cli_env,
         )
 
         # Parse list of User models
@@ -90,18 +80,13 @@ class TestUserManagementCLI:
         create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
                 username,
                 "test_password",
             ],
+            env=cli_env,
         )
 
         # Parse created user to get ID
@@ -112,17 +97,12 @@ class TestUserManagementCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "get",
                 str(user_id),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK User model
@@ -141,18 +121,13 @@ class TestUserManagementCLI:
         create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
                 username,
                 "test_password",
             ],
+            env=cli_env,
         )
 
         # Parse created user to get ID
@@ -163,18 +138,13 @@ class TestUserManagementCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "update",
                 str(user_id),
                 "--active",  # Changed from --email
             ],
+            env=cli_env,
         )
 
         # Parse and validate updated user
@@ -192,18 +162,13 @@ class TestUserManagementCLI:
         create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
                 username,
                 "test_password",
             ],
+            env=cli_env,
         )
 
         # Parse created user to get ID
@@ -214,18 +179,13 @@ class TestUserManagementCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "delete",
                 str(user_id),
                 "--yes",  # Auto-confirm
             ],
+            env=cli_env,
         )
 
         # Validate success response
@@ -242,18 +202,13 @@ class TestUserManagementCLI:
         create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
                 username,
                 "test_password",
             ],
+            env=cli_env,
         )
 
         # Parse created user to get ID
@@ -264,17 +219,12 @@ class TestUserManagementCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "update",  # user permissions list doesn't exist, it's just user get
                 str(user_id),
             ],
+            env=cli_env,
         )
 
         # Parse and validate user with permissions
@@ -293,18 +243,13 @@ class TestUserManagementCLI:
         create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
                 username,
                 "test_password",
             ],
+            env=cli_env,
         )
 
         # Parse created user to get ID
@@ -315,12 +260,6 @@ class TestUserManagementCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "update",
@@ -328,6 +267,7 @@ class TestUserManagementCLI:
                 "--permissions",
                 "read:jobs",
             ],
+            env=cli_env,
         )
 
         # Parse and validate user with added permission
@@ -346,12 +286,6 @@ class TestUserManagementCLI:
         create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "create",
@@ -360,6 +294,7 @@ class TestUserManagementCLI:
                 "--permissions",
                 "write:jobs",
             ],
+            env=cli_env,
         )
 
         # Parse created user to get ID
@@ -371,12 +306,6 @@ class TestUserManagementCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
                 "--json",
                 "user",
                 "update",
@@ -384,6 +313,7 @@ class TestUserManagementCLI:
                 "--permissions",
                 "read:jobs",  # Replaces write:jobs
             ],
+            env=cli_env,
         )
 
         # Parse and validate user with permission removed

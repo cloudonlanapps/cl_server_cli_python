@@ -57,19 +57,12 @@ class TestJobTracking:
         cli_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "jobs",
                 str(entity_id),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK EntityJobResponse model list
@@ -107,19 +100,12 @@ class TestFaceCommands:
         cli_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "faces",
                 "list",
                 str(entity_id),
             ],
+            env=cli_env,
         )
 
         # Parse list of FaceResponse models
@@ -154,14 +140,6 @@ class TestFaceCommands:
             cli_result = cli_runner.invoke(
                 cli,
                 [
-                    "--username",
-                    cli_env["CL_USERNAME"],
-                    "--password",
-                    cli_env["CL_PASSWORD"],
-                    "--auth-url",
-                    cli_env["CL_AUTH_URL"],
-                    "--store-url",
-                    cli_env["CL_STORE_URL"],
                     "--json",
                     "faces",
                     "similar",
@@ -171,6 +149,7 @@ class TestFaceCommands:
                     "--threshold",
                     "0.5",
                 ],
+                env=cli_env,
             )
             if cli_result.exit_code == 0:
                 break
@@ -210,14 +189,6 @@ class TestFaceCommands:
             cli_result = cli_runner.invoke(
                 cli,
                 [
-                    "--username",
-                    cli_env["CL_USERNAME"],
-                    "--password",
-                    cli_env["CL_PASSWORD"],
-                    "--auth-url",
-                    cli_env["CL_AUTH_URL"],
-                    "--store-url",
-                    cli_env["CL_STORE_URL"],
                     "--json",
                     "faces",
                     "download-embedding",
@@ -225,6 +196,7 @@ class TestFaceCommands:
                     "--output",
                     str(output_file),
                 ],
+                env=cli_env,
             )
             if cli_result.exit_code == 0:
                 break
@@ -260,19 +232,12 @@ class TestFaceCommands:
         cli_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "faces",
                 "matches",
                 str(face_id),
             ],
+            env=cli_env,
         )
 
         # Parse list of FaceMatchResult models
@@ -294,18 +259,11 @@ class TestPersonsCommands:
         cli_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "persons",
                 "list",
             ],
+            env=cli_env,
         )
 
         # Parse list of KnownPersonResponse models
@@ -338,19 +296,12 @@ class TestPersonsCommands:
         cli_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "persons",
                 "get",
                 str(person_id),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK KnownPersonResponse model
@@ -361,14 +312,6 @@ class TestPersonsCommands:
         cli_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "persons",
                 "update",
@@ -376,6 +319,7 @@ class TestPersonsCommands:
                 "--name",
                 "Test Person",
             ],
+            env=cli_env,
         )
 
         # Parse updated person
@@ -408,19 +352,12 @@ class TestPersonsCommands:
         cli_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "persons",
                 "faces",
                 str(person_id),
             ],
+            env=cli_env,
         )
 
         # Parse list of FaceResponse models
@@ -462,14 +399,6 @@ class TestImagesCommands:
             cli_result = cli_runner.invoke(
                 cli,
                 [
-                    "--username",
-                    cli_env["CL_USERNAME"],
-                    "--password",
-                    cli_env["CL_PASSWORD"],
-                    "--auth-url",
-                    cli_env["CL_AUTH_URL"],
-                    "--store-url",
-                    cli_env["CL_STORE_URL"],
                     "--json",
                     "images",
                     "similar",
@@ -479,6 +408,7 @@ class TestImagesCommands:
                     "--threshold",
                     "0.5",
                 ],
+                env=cli_env,
             )
             if cli_result.exit_code == 0:
                 break
@@ -516,20 +446,13 @@ class TestImagesCommands:
             cli_result = cli_runner.invoke(
                 cli,
                 [
-                    "--username",
-                    cli_env["CL_USERNAME"],
-                    "--password",
-                    cli_env["CL_PASSWORD"],
-                    "--auth-url",
-                    cli_env["CL_AUTH_URL"],
-                    "--store-url",
-                    cli_env["CL_STORE_URL"],
                     "--json",
                     "images",
                     "similar",
                     str(entity_id),
                     "--details",
                 ],
+                env=cli_env,
             )
             if cli_result.exit_code == 0:
                 break
@@ -567,14 +490,6 @@ class TestImagesCommands:
         cli_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "images",
                 "download-embedding",
@@ -582,6 +497,7 @@ class TestImagesCommands:
                 "--output",
                 str(output_file),
             ],
+            env=cli_env,
         )
 
         # Validate success response

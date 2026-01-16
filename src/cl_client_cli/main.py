@@ -237,19 +237,19 @@ def print_job_result(ctx: click.Context, job: JobResponse) -> None:
 )
 @click.option(
     "--auth-url",
-    envvar="AUTH_URL",
+    envvar="CL_AUTH_URL",
     default="http://localhost:8000",
     help="Auth service URL",
 )
 @click.option(
     "--compute-url",
-    envvar="COMPUTE_URL",
+    envvar="CL_COMPUTE_URL",
     default="http://localhost:8002",
     help="Compute service URL",
 )
 @click.option(
     "--store-url",
-    envvar="STORE_URL",
+    envvar="CL_STORE_URL",
     default="http://localhost:8001",
     help="Store service URL",
 )

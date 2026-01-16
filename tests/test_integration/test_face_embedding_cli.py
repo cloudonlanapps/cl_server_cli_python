@@ -35,17 +35,12 @@ class TestFaceEmbeddingCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "face-embedding",
                 "embed",
                 str(test_image),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -64,18 +59,13 @@ class TestFaceEmbeddingCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "face-embedding",
                 "embed",
                 "--watch",
                 str(test_image),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -97,12 +87,6 @@ class TestFaceEmbeddingCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "face-embedding",
                 "embed",
@@ -110,6 +94,7 @@ class TestFaceEmbeddingCLI:
                 "--output",
                 str(output_file),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -130,17 +115,12 @@ class TestFaceEmbeddingCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "face-embedding",
                 "embed",
                 "/nonexistent/file.jpg",
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response

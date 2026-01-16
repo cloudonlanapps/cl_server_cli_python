@@ -35,17 +35,12 @@ class TestHashCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "hash",
                 "compute",
                 str(test_image),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -64,18 +59,13 @@ class TestHashCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "hash",
                 "compute",
                 "--watch",
                 str(test_image),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -97,12 +87,6 @@ class TestHashCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "hash",
                 "compute",
@@ -110,6 +94,7 @@ class TestHashCLI:
                 "--output",
                 str(output_file),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK JobResponse model
@@ -130,17 +115,12 @@ class TestHashCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
                 "--json",
                 "hash",
                 "compute",
                 "/nonexistent/file.jpg",
             ],
+            env=cli_env,
         )
 
         # Validate JSON error response

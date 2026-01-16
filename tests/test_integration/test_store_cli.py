@@ -36,14 +36,6 @@ class TestStoreCLI:
         create_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "create",
@@ -52,6 +44,7 @@ class TestStoreCLI:
                 "--file",
                 str(test_image),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK Entity model
@@ -64,19 +57,12 @@ class TestStoreCLI:
         get_result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "get",
                 str(entity_id),
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK Entity model
@@ -92,14 +78,6 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "list",
@@ -108,6 +86,7 @@ class TestStoreCLI:
                 "--page-size",
                 "10",
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK EntityListResponse model
@@ -136,14 +115,6 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "update",
@@ -151,6 +122,7 @@ class TestStoreCLI:
                 "--label",
                 "test_store_update_after",
             ],
+            env=cli_env,
         )
 
         # Validate success response
@@ -176,14 +148,6 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "patch",
@@ -191,6 +155,7 @@ class TestStoreCLI:
                 "--label",
                 "test_store_patched",
             ],
+            env=cli_env,
         )
 
         # Validate success response
@@ -216,20 +181,13 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "delete",
                 str(entity_id),
                 "--yes",  # Auto-confirm
             ],
+            env=cli_env,
         )
 
         # Validate success response
@@ -255,19 +213,12 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "versions",
                 str(entity_id),
             ],
+            env=cli_env,
         )
 
         # Parse list of EntityVersion models
@@ -284,19 +235,12 @@ class TestStoreCLI:
         result = cli_runner.invoke(
             cli,
             [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--auth-url",
-                cli_env["CL_AUTH_URL"],
-                "--store-url",
-                cli_env["CL_STORE_URL"],
                 "--json",
                 "store",
                 "admin",
                 "config",
             ],
+            env=cli_env,
         )
 
         # Parse and validate with SDK StoreConfig model
