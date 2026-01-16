@@ -15,6 +15,9 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
+from cl_client.models import JobResponse
+
+from .conftest import parse_cli_json, assert_cli_error
 
 
 @pytest.mark.integration
@@ -27,8 +30,8 @@ class TestHashCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test hash compute with HTTP polling (default behavior)."""
-        # Execute CLI command (uses wait=True by default)
+        """Test hash compute with HTTP polling and JSON output."""
+        # Execute CLI command with JSON output (uses wait=True by default)
         result = cli_runner.invoke(
             cli,
             [
@@ -38,21 +41,17 @@ class TestHashCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "hash",
                 "compute",
                 str(test_image),
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
-        # Should show job ID in output
-        assert (
-            "test-job" in result.output
-            or "job_id" in result.output.lower()
-            or len(result.output) > 0
-        )
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "hash"
 
     def test_hash_compute_mqtt_callbacks(
         self,
@@ -60,8 +59,8 @@ class TestHashCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test hash compute with MQTT callbacks (--watch flag)."""
-        # Execute CLI command with --watch for MQTT updates
+        """Test hash compute with MQTT callbacks (--watch flag) and JSON output."""
+        # Execute CLI command with --watch for MQTT updates and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -71,6 +70,7 @@ class TestHashCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "hash",
                 "compute",
                 "--watch",
@@ -78,9 +78,10 @@ class TestHashCLI:
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "hash"
 
     def test_hash_compute_with_output(
         self,
@@ -89,10 +90,10 @@ class TestHashCLI:
         test_image: Path,
         tmp_path: Path,
     ):
-        """Test hash compute with output file download."""
-        output_file = tmp_path / "hash_result.json"
+        """Test hash compute with output file download and JSON output."""
+        output_file = tmp_path / "hash.json"
 
-        # Execute CLI command with -o flag to download hash
+        # Execute CLI command with -o flag to download result and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -102,6 +103,7 @@ class TestHashCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "hash",
                 "compute",
                 str(test_image),
@@ -110,20 +112,21 @@ class TestHashCLI:
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
-        # Hash file should be downloaded
-        assert output_file.exists(), f"Hash file not created at {output_file}"
-        assert output_file.stat().st_size > 0, "Hash file is empty"
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "hash"
+        # Output file should be downloaded
+        assert output_file.exists(), f"Output file not created at {output_file}"
+        assert output_file.stat().st_size > 0, "Output file is empty"
 
     def test_hash_compute_invalid_file(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test hash compute with missing file."""
-        # Execute CLI command with non-existent file
+        """Test hash compute with missing file returns JSON error."""
+        # Execute CLI command with non-existent file and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -133,17 +136,12 @@ class TestHashCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "hash",
                 "compute",
                 "/nonexistent/file.jpg",
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail for missing file"
-        # Should show error message
-        assert (
-            "error" in result.output.lower()
-            or "not found" in result.output.lower()
-            or "does not exist" in result.output.lower()
-        )
+        # Validate JSON error response
+        assert_cli_error(result)

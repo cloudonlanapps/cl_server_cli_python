@@ -15,6 +15,9 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
+from cl_client.models import JobResponse
+
+from .conftest import parse_cli_json, assert_cli_error
 
 
 @pytest.mark.integration
@@ -27,8 +30,8 @@ class TestHlsStreamingCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test hls-streaming generate with HTTP polling (default behavior)."""
-        # Execute CLI command (uses wait=True by default)
+        """Test hls-streaming generate with HTTP polling and JSON output."""
+        # Execute CLI command with JSON output (uses wait=True by default)
         result = cli_runner.invoke(
             cli,
             [
@@ -38,21 +41,17 @@ class TestHlsStreamingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "hls-streaming",
-                "generate",
+                "generate-manifest",
                 str(test_image),
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
-        # Should show job ID in output
-        assert (
-            "test-job" in result.output
-            or "job_id" in result.output.lower()
-            or len(result.output) > 0
-        )
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "hls_streaming"
 
     def test_hls_generate_mqtt_callbacks(
         self,
@@ -60,8 +59,8 @@ class TestHlsStreamingCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test hls-streaming generate with MQTT callbacks (--watch flag)."""
-        # Execute CLI command with --watch for MQTT updates
+        """Test hls-streaming generate with MQTT callbacks (--watch flag) and JSON output."""
+        # Execute CLI command with --watch for MQTT updates and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -71,16 +70,18 @@ class TestHlsStreamingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "hls-streaming",
-                "generate",
+                "generate-manifest",
                 "--watch",
                 str(test_image),
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "hls_streaming"
 
     def test_hls_generate_with_output(
         self,
@@ -89,10 +90,10 @@ class TestHlsStreamingCLI:
         test_image: Path,
         tmp_path: Path,
     ):
-        """Test hls-streaming generate with output file download."""
+        """Test hls-streaming generate with output file download and JSON output."""
         output_file = tmp_path / "manifest.m3u8"
 
-        # Execute CLI command with -o flag to download manifest
+        # Execute CLI command with -o flag to download manifest and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -102,28 +103,30 @@ class TestHlsStreamingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "hls-streaming",
-                "generate",
+                "generate-manifest",
                 str(test_image),
                 "--output",
                 str(output_file),
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
-        # Manifest file should be downloaded
-        assert output_file.exists(), f"Manifest file not created at {output_file}"
-        assert output_file.stat().st_size > 0, "Manifest file is empty"
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "hls_streaming"
+        # Output file should be downloaded
+        assert output_file.exists(), f"Output file not created at {output_file}"
+        assert output_file.stat().st_size > 0, "Output file is empty"
 
     def test_hls_generate_invalid_file(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test hls-streaming generate with missing file."""
-        # Execute CLI command with non-existent file
+        """Test hls-streaming generate with missing file returns JSON error."""
+        # Execute CLI command with non-existent file and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -133,17 +136,12 @@ class TestHlsStreamingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "hls-streaming",
-                "generate",
+                "generate-manifest",
                 "/nonexistent/file.mp4",
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail for missing file"
-        # Should show error message
-        assert (
-            "error" in result.output.lower()
-            or "not found" in result.output.lower()
-            or "does not exist" in result.output.lower()
-        )
+        # Validate JSON error response
+        assert_cli_error(result)

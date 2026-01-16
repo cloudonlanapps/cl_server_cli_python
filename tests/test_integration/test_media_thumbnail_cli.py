@@ -15,6 +15,9 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
+from cl_client.models import JobResponse
+
+from .conftest import parse_cli_json, assert_cli_error
 
 
 @pytest.mark.integration
@@ -27,8 +30,8 @@ class TestMediaThumbnailCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test media-thumbnail generate with HTTP polling (default behavior)."""
-        # Execute CLI command (uses wait=True by default)
+        """Test media-thumbnail generate with HTTP polling and JSON output."""
+        # Execute CLI command with JSON output (uses wait=True by default)
         result = cli_runner.invoke(
             cli,
             [
@@ -38,21 +41,17 @@ class TestMediaThumbnailCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "media-thumbnail",
                 "generate",
                 str(test_image),
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
-        # Should show job ID in output
-        assert (
-            "test-job" in result.output
-            or "job_id" in result.output.lower()
-            or len(result.output) > 0
-        )
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "media_thumbnail"
 
     def test_thumbnail_generate_mqtt_callbacks(
         self,
@@ -60,8 +59,8 @@ class TestMediaThumbnailCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test media-thumbnail generate with MQTT callbacks (--watch flag)."""
-        # Execute CLI command with --watch for MQTT updates
+        """Test media-thumbnail generate with MQTT callbacks (--watch flag) and JSON output."""
+        # Execute CLI command with --watch for MQTT updates and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -71,6 +70,7 @@ class TestMediaThumbnailCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "media-thumbnail",
                 "generate",
                 "--watch",
@@ -78,48 +78,10 @@ class TestMediaThumbnailCLI:
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
-
-    def test_thumbnail_generate_with_size(
-        self,
-        cli_runner: CliRunner,
-        cli_env: dict[str, str],
-        test_image: Path,
-        tmp_path: Path,
-    ):
-        """Test media-thumbnail generate with custom size."""
-        output_file = tmp_path / "thumbnail.jpg"
-
-        # Execute CLI command with custom size
-        result = cli_runner.invoke(
-            cli,
-            [
-                "--username",
-                cli_env["CL_USERNAME"],
-                "--password",
-                cli_env["CL_PASSWORD"],
-                "--compute-url",
-                cli_env["CL_COMPUTE_URL"],
-                "media-thumbnail",
-                "generate",
-                str(test_image),
-                "--width",
-                "320",
-                "--height",
-                "240",
-                "--output",
-                str(output_file),
-            ],
-        )
-
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
-        # Thumbnail file should be downloaded
-        assert output_file.exists(), f"Thumbnail file not created at {output_file}"
-        assert output_file.stat().st_size > 0, "Thumbnail file is empty"
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "media_thumbnail"
 
     def test_thumbnail_generate_with_output(
         self,
@@ -128,10 +90,10 @@ class TestMediaThumbnailCLI:
         test_image: Path,
         tmp_path: Path,
     ):
-        """Test media-thumbnail generate with output file download."""
+        """Test media-thumbnail generate with output file download and JSON output."""
         output_file = tmp_path / "thumbnail.jpg"
 
-        # Execute CLI command with -o flag to download thumbnail
+        # Execute CLI command with -o flag to download thumbnail and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -141,6 +103,7 @@ class TestMediaThumbnailCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "media-thumbnail",
                 "generate",
                 str(test_image),
@@ -149,20 +112,21 @@ class TestMediaThumbnailCLI:
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "media_thumbnail"
         # Thumbnail file should be downloaded
         assert output_file.exists(), f"Thumbnail file not created at {output_file}"
         assert output_file.stat().st_size > 0, "Thumbnail file is empty"
 
-    def test_thumbnail_invalid_file(
+    def test_thumbnail_generate_invalid_file(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test media-thumbnail generate with missing file."""
-        # Execute CLI command with non-existent file
+        """Test media-thumbnail generate with missing file returns JSON error."""
+        # Execute CLI command with non-existent file and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -172,17 +136,43 @@ class TestMediaThumbnailCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "media-thumbnail",
                 "generate",
                 "/nonexistent/file.jpg",
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail for missing file"
-        # Should show error message
-        assert (
-            "error" in result.output.lower()
-            or "not found" in result.output.lower()
-            or "does not exist" in result.output.lower()
+        # Validate JSON error response
+        assert_cli_error(result)
+
+    def test_thumbnail_generate_with_size(
+        self,
+        cli_runner: CliRunner,
+        cli_env: dict[str, str],
+        test_image: Path,
+    ):
+        """Test media-thumbnail generate with custom size and JSON output."""
+        # Execute CLI command with custom thumbnail size and JSON output
+        result = cli_runner.invoke(
+            cli,
+            [
+                "--username",
+                cli_env["CL_USERNAME"],
+                "--password",
+                cli_env["CL_PASSWORD"],
+                "--compute-url",
+                cli_env["CL_COMPUTE_URL"],
+                "--json",
+                "media-thumbnail",
+                "generate",
+                str(test_image),
+                "--size",
+                "256",
+            ],
         )
+
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "media_thumbnail"

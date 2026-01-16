@@ -15,6 +15,9 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
+from cl_client.store_models import  StoreConfig
+from cl_client.auth_models import UserResponse as User
+from .conftest import parse_cli_json, assert_cli_error
 
 
 @pytest.mark.integration
@@ -26,26 +29,21 @@ class TestAuthErrorsCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test store read operation without authentication."""
+        """Test store read operation without authentication returns JSON error."""
         # Execute CLI command without credentials
         result = cli_runner.invoke(
             cli,
             [
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "list",
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail without authentication"
-        # Should show authentication error
-        assert (
-            "auth" in result.output.lower()
-            or "unauthorized" in result.output.lower()
-            or "401" in result.output
-        )
+        # Validate JSON error response
+        assert_cli_error(result)
 
     def test_unauthenticated_store_write(
         self,
@@ -53,13 +51,14 @@ class TestAuthErrorsCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test store write operation without authentication."""
+        """Test store write operation without authentication returns JSON error."""
         # Execute CLI command without credentials
         result = cli_runner.invoke(
             cli,
             [
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "create",
                 "--label",
@@ -69,14 +68,8 @@ class TestAuthErrorsCLI:
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail without authentication"
-        # Should show authentication error
-        assert (
-            "auth" in result.output.lower()
-            or "unauthorized" in result.output.lower()
-            or "401" in result.output
-        )
+        # Validate JSON error response
+        assert_cli_error(result)
 
     def test_unauthenticated_plugin(
         self,
@@ -84,34 +77,29 @@ class TestAuthErrorsCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test plugin operation without authentication."""
+        """Test plugin operation without authentication returns JSON error."""
         # Execute CLI command without credentials
         result = cli_runner.invoke(
             cli,
             [
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "clip-embedding",
                 "embed",
                 str(test_image),
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail without authentication"
-        # Should show authentication error
-        assert (
-            "auth" in result.output.lower()
-            or "unauthorized" in result.output.lower()
-            or "401" in result.output
-        )
+        # Validate JSON error response
+        assert_cli_error(result)
 
     def test_insufficient_permissions_admin(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test admin operation without admin role."""
+        """Test admin operation without admin role returns JSON error."""
         # First create a non-admin user
         admin_create_result = cli_runner.invoke(
             cli,
@@ -122,6 +110,7 @@ class TestAuthErrorsCLI:
                 cli_env["CL_PASSWORD"],
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
+                "--json",
                 "users",
                 "create",
                 "--username",
@@ -133,9 +122,9 @@ class TestAuthErrorsCLI:
             ],
         )
 
-        assert (
-            admin_create_result.exit_code == 0
-        ), f"Create failed: {admin_create_result.output}"
+        # Parse created user
+        created_user = parse_cli_json(admin_create_result, User)
+        assert created_user.username == "test_nonadmin"
 
         # Try to use admin command as non-admin user
         result = cli_runner.invoke(
@@ -149,21 +138,15 @@ class TestAuthErrorsCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "admin",
                 "config",
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail without admin permissions"
-        # Should show permission error
-        assert (
-            "permission" in result.output.lower()
-            or "forbidden" in result.output.lower()
-            or "403" in result.output
-            or "unauthorized" in result.output.lower()
-        )
+        # Validate JSON error response
+        assert_cli_error(result)
 
     def test_insufficient_permissions_write(
         self,
@@ -171,7 +154,7 @@ class TestAuthErrorsCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test write operation without write permission."""
+        """Test write operation without write permission returns JSON error."""
         # First create a user with read-only permissions
         admin_create_result = cli_runner.invoke(
             cli,
@@ -182,6 +165,7 @@ class TestAuthErrorsCLI:
                 cli_env["CL_PASSWORD"],
                 "--auth-url",
                 cli_env["CL_AUTH_URL"],
+                "--json",
                 "users",
                 "create",
                 "--username",
@@ -193,9 +177,9 @@ class TestAuthErrorsCLI:
             ],
         )
 
-        assert (
-            admin_create_result.exit_code == 0
-        ), f"Create failed: {admin_create_result.output}"
+        # Parse created user
+        created_user = parse_cli_json(admin_create_result, User)
+        assert created_user.username == "test_readonly"
 
         # Try to create entity as read-only user
         result = cli_runner.invoke(
@@ -209,6 +193,7 @@ class TestAuthErrorsCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "create",
                 "--label",
@@ -218,22 +203,15 @@ class TestAuthErrorsCLI:
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail without write permissions"
-        # Should show permission error
-        assert (
-            "permission" in result.output.lower()
-            or "forbidden" in result.output.lower()
-            or "403" in result.output
-            or "unauthorized" in result.output.lower()
-        )
+        # Validate JSON error response
+        assert_cli_error(result)
 
     def test_guest_mode_read(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test read operation in guest mode (if enabled)."""
+        """Test read operation in guest mode with JSON output."""
         # Execute CLI command without credentials
         result = cli_runner.invoke(
             cli,
@@ -242,22 +220,18 @@ class TestAuthErrorsCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "admin",
                 "config",
             ],
         )
 
-        # In guest mode, should see config with guest mode enabled
-        # If guest mode is disabled, should see authentication error
-        # Either is acceptable behavior
+        # In guest mode, should succeed or fail depending on configuration
         if result.exit_code == 0:
-            # Guest mode is enabled - should show config
-            assert "guest" in result.output.lower() or "config" in result.output.lower()
+            # Guest mode is enabled - validate StoreConfig model
+            config = parse_cli_json(result, StoreConfig)
+            assert hasattr(config, "guest_mode")
         else:
-            # Guest mode is disabled - should show auth error
-            assert (
-                "auth" in result.output.lower()
-                or "unauthorized" in result.output.lower()
-                or "401" in result.output
-            )
+            # Guest mode is disabled - validate JSON error response
+            assert_cli_error(result)

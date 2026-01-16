@@ -15,7 +15,8 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
-from .conftest import SyncTestHelper
+from cl_client.store_models import Entity, EntityListResponse, EntityVersion, StoreConfig
+from .conftest import SyncTestHelper, parse_cli_json, parse_cli_json_list, assert_cli_success
 
 
 @pytest.mark.integration
@@ -28,7 +29,7 @@ class TestStoreCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test store create and get commands with real file."""
+        """Test store create and get commands with JSON output."""
         # Create entity
         create_result = cli_runner.invoke(
             cli,
@@ -41,6 +42,7 @@ class TestStoreCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "create",
                 "--label",
@@ -50,26 +52,12 @@ class TestStoreCLI:
             ],
         )
 
-        assert create_result.exit_code == 0, f"Create failed: {create_result.output}"
-        assert "created" in create_result.output.lower() or "✓" in create_result.output
-
-        # Extract entity ID from output
-        # Output should contain "Entity ID: <id>" or similar
-        lines = create_result.output.split("\n")
-        entity_id = None
-        for line in lines:
-            if "id" in line.lower() and any(char.isdigit() for char in line):
-                # Extract number from line
-                import re
-
-                numbers = re.findall(r"\d+", line)
-                if numbers:
-                    entity_id = numbers[0]
-                    break
-
-        assert (
-            entity_id is not None
-        ), f"Could not extract entity ID from output: {create_result.output}"
+        # Parse and validate with SDK Entity model
+        created_entity = parse_cli_json(create_result, Entity)
+        assert created_entity.label == "test_store_create"
+        assert created_entity.file_path is not None
+        assert created_entity.id is not None
+        entity_id = created_entity.id
 
         # Get the created entity
         get_result = cli_runner.invoke(
@@ -83,22 +71,24 @@ class TestStoreCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "get",
-                entity_id,
+                str(entity_id),
             ],
         )
 
-        assert get_result.exit_code == 0, f"Get failed: {get_result.output}"
-        assert "test_store_create" in get_result.output
-        assert entity_id in get_result.output
+        # Parse and validate with SDK Entity model
+        retrieved_entity = parse_cli_json(get_result, Entity)
+        assert retrieved_entity.id == entity_id
+        assert retrieved_entity.label == "test_store_create"
 
     def test_store_list(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test store list command with real data."""
+        """Test store list command with JSON output."""
         result = cli_runner.invoke(
             cli,
             [
@@ -110,6 +100,7 @@ class TestStoreCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "list",
                 "--page",
@@ -119,8 +110,11 @@ class TestStoreCLI:
             ],
         )
 
-        assert result.exit_code == 0, f"List failed: {result.output}"
-        assert "page" in result.output.lower() or "entities" in result.output.lower()
+        # Parse and validate with SDK EntityListResponse model
+        data = parse_cli_json(result, EntityListResponse)
+        assert data.pagination.page == 1
+        assert data.pagination.page_size == 10
+        assert isinstance(data.items, list)
 
     def test_store_update(
         self,
@@ -129,7 +123,7 @@ class TestStoreCLI:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test store update command."""
+        """Test store update command with JSON output."""
         # Create entity first
         entity_id = test_helper.create_test_entity(
             label="test_store_update_before",
@@ -150,6 +144,7 @@ class TestStoreCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "update",
                 str(entity_id),
@@ -158,9 +153,8 @@ class TestStoreCLI:
             ],
         )
 
-        assert result.exit_code == 0, f"Update failed: {result.output}"
-        assert "updated" in result.output.lower() or "✓" in result.output
-        assert "test_store_update_after" in result.output
+        # Validate success response
+        assert_cli_success(result, "Updated entity")
 
     def test_store_patch(
         self,
@@ -169,7 +163,7 @@ class TestStoreCLI:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test store patch command."""
+        """Test store patch command with JSON output."""
         # Create entity first
         entity_id = test_helper.create_test_entity(
             label="test_store_patch",
@@ -190,6 +184,7 @@ class TestStoreCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "patch",
                 str(entity_id),
@@ -198,12 +193,8 @@ class TestStoreCLI:
             ],
         )
 
-        assert result.exit_code == 0, f"Patch failed: {result.output}"
-        assert (
-            "patched" in result.output.lower()
-            or "updated" in result.output.lower()
-            or "✓" in result.output
-        )
+        # Validate success response
+        assert_cli_success(result, "Updated entity")
 
     def test_store_delete(
         self,
@@ -212,7 +203,7 @@ class TestStoreCLI:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test store delete command."""
+        """Test store delete command with JSON output."""
         # Create entity first
         entity_id = test_helper.create_test_entity(
             label="test_store_delete",
@@ -233,6 +224,7 @@ class TestStoreCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "delete",
                 str(entity_id),
@@ -240,8 +232,8 @@ class TestStoreCLI:
             ],
         )
 
-        assert result.exit_code == 0, f"Delete failed: {result.output}"
-        assert "deleted" in result.output.lower() or "✓" in result.output
+        # Validate success response
+        assert_cli_success(result, "Deleted entity")
 
     def test_store_versions(
         self,
@@ -250,7 +242,7 @@ class TestStoreCLI:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test store versions command."""
+        """Test store versions command with JSON output."""
         # Create entity first
         entity_id = test_helper.create_test_entity(
             label="test_store_versions",
@@ -271,21 +263,24 @@ class TestStoreCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "versions",
                 str(entity_id),
             ],
         )
 
-        assert result.exit_code == 0, f"Versions failed: {result.output}"
-        assert "version" in result.output.lower() or str(entity_id) in result.output
+        # Parse list of EntityVersion models
+        versions = parse_cli_json_list(result, EntityVersion)
+        assert len(versions) >= 1
+        assert versions[0].entity_id == entity_id
 
     def test_store_admin_config(
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test store admin config command."""
+        """Test store admin config command with JSON output."""
         result = cli_runner.invoke(
             cli,
             [
@@ -297,11 +292,13 @@ class TestStoreCLI:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "admin",
                 "config",
             ],
         )
 
-        assert result.exit_code == 0, f"Config failed: {result.output}"
-        assert "guest" in result.output.lower() or "config" in result.output.lower()
+        # Parse and validate with SDK StoreConfig model
+        config = parse_cli_json(result, StoreConfig)
+        assert hasattr(config, "guest_mode")

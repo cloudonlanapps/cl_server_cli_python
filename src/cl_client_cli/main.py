@@ -1,11 +1,13 @@
 """CL Client CLI - Main command-line interface."""
 
 import asyncio
+import json
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import NoReturn, Optional
 
 import click
+from pydantic import BaseModel
 from rich.console import Console
 from rich.progress import (
     Progress,
@@ -14,7 +16,6 @@ from rich.progress import (
     BarColumn,
     TaskProgressColumn,
 )
-from rich.table import Table
 
 from cl_client import ComputeClient, SessionManager, ServerConfig, StoreManager
 from cl_client.models import JobResponse
@@ -22,34 +23,106 @@ from cl_client.models import JobResponse
 console = Console()
 
 
-class JobProgressTracker:
-    """Track job progress with Rich progress bar."""
+# ============================================================================
+# CLI Response Models (minimal - rest use SDK models)
+# ============================================================================
 
-    def __init__(self, job_id: str, description: str):
+
+class ErrorResponse(BaseModel):
+    """CLI error response model."""
+
+    error: str
+    status: str = "failed"
+
+
+class SuccessResponse(BaseModel):
+    """CLI success response model for void operations."""
+
+    status: str = "success"
+    message: Optional[str] = None
+
+
+# ============================================================================
+# Output Helper Functions
+# ============================================================================
+
+
+def should_use_json(ctx: click.Context) -> bool:
+    """Check if JSON output is enabled."""
+    return ctx.obj.get("output_json", False)
+
+
+def output_sdk_result(ctx: click.Context, sdk_model: BaseModel) -> None:
+    """Output SDK Pydantic model directly.
+
+    Args:
+        ctx: Click context
+        sdk_model: Any Pydantic model from SDK (JobResponse, EntityListResult, etc.)
+    """
+    # Dump SDK model as JSON (both --json and human mode for now)
+    click.echo(sdk_model.model_dump_json(indent=2, exclude_none=True))
+
+
+def output_error(ctx: click.Context, error_message: str) -> NoReturn:
+    """Output CLI error and exit.
+
+    Args:
+        ctx: Click context
+        error_message: Error message to display
+    """
+    error = ErrorResponse(error=error_message)
+    if should_use_json(ctx):
+        click.echo(error.model_dump_json(indent=2))
+    else:
+        # Human mode: just print error message
+        click.echo(f"Error: {error_message}", err=True)
+    sys.exit(1)
+
+
+class JobProgressTracker:
+    """Track job progress with optional display.
+
+    When JSON mode is active, suppresses all stdout/stderr output.
+    MQTT callbacks are still used internally regardless of JSON mode.
+    """
+
+    def __init__(self, ctx: click.Context, job_id: str, description: str):
+        self.ctx = ctx
         self.job_id = job_id
         self.description = description
-        self.progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console,
-        )
-        self.task_id = None
+        self.use_json = should_use_json(ctx)
         self.completed = asyncio.Event()
         self.final_job: Optional[JobResponse] = None
 
+        if not self.use_json:
+            self.progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[bold blue]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                console=console,
+            )
+            self.task_id = None  # Will be set to TaskID when progress starts
+        else:
+            # JSON mode: no visual progress, but MQTT callbacks still run
+            self.progress = None
+            self.task_id = None
+
     def __enter__(self):
-        self.progress.start()
-        self.task_id = self.progress.add_task(self.description, total=100)
+        """Start progress display (only if not in JSON mode)."""
+        if self.progress:
+            self.progress.start()
+            self.task_id = self.progress.add_task(self.description, total=100)
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        self.progress.stop()
+        """Stop progress display (only if not in JSON mode)."""
+        if self.progress:
+            self.progress.stop()
 
     def on_progress(self, job: JobResponse):
-        """Update progress bar."""
-        if self.task_id is not None:
+        """Update progress bar (only if not in JSON mode)."""
+        if self.progress and self.task_id is not None:
             self.progress.update(
                 self.task_id,
                 completed=job.progress,
@@ -59,7 +132,7 @@ class JobProgressTracker:
     def on_complete(self, job: JobResponse):
         """Handle job completion."""
         self.final_job = job
-        if self.task_id is not None:
+        if self.progress and self.task_id is not None:
             self.progress.update(
                 self.task_id,
                 completed=100,
@@ -73,28 +146,19 @@ class JobProgressTracker:
             await asyncio.wait_for(self.completed.wait(), timeout=timeout)
             return self.final_job
         except asyncio.TimeoutError:
-            console.print(f"[red]Job {self.job_id} timed out after {timeout}s[/red]")
+            if not self.use_json:
+                console.print(f"[red]Job {self.job_id} timed out after {timeout}s[/red]")
             return None
 
 
-def print_job_result(job: JobResponse):
-    """Print job result in a nice table."""
-    table = Table(title=f"Job {job.job_id}")
-    table.add_column("Field", style="cyan", no_wrap=True)
-    table.add_column("Value", style="green")
+def print_job_result(ctx: click.Context, job: JobResponse) -> None:
+    """Print job result using SDK JobResponse model.
 
-    table.add_row("Job ID", job.job_id)
-    table.add_row("Task Type", job.task_type)
-    table.add_row("Status", job.status)
-    table.add_row("Progress", f"{job.progress}%")
-
-    if job.task_output:
-        table.add_row("Output", str(job.task_output))
-
-    if job.error_message:
-        table.add_row("Error", job.error_message)
-
-    console.print(table)
+    Args:
+        ctx: Click context
+        job: JobResponse from SDK (already a Pydantic model)
+    """
+    output_sdk_result(ctx, job)  # Just dump the SDK model!
 
 
 @click.group()
@@ -133,6 +197,13 @@ def print_job_result(job: JobResponse):
     default=False,
     help="Disable authentication (use no-auth mode)",
 )
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output results as JSON (script-friendly)",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -142,6 +213,7 @@ def cli(
     compute_url: str,
     store_url: str,
     no_auth: bool,
+    output_json: bool,
 ):
     """CL Client CLI - Command-line interface for compute, store, and auth operations.
 
@@ -171,6 +243,7 @@ def cli(
     ctx.obj["compute_url"] = compute_url
     ctx.obj["store_url"] = store_url
     ctx.obj["no_auth"] = no_auth
+    ctx.obj["output_json"] = output_json
     ctx.obj["server_config"] = ServerConfig(
         auth_url=auth_url,
         compute_url=compute_url,
@@ -361,19 +434,8 @@ def user_create(
                 user_create=user_create,
             )
 
-            console.print("[green]✓ User created successfully[/green]")
-            table = Table(title=f"User {user.username}")
-            table.add_column("Field", style="cyan")
-            table.add_column("Value", style="green")
-            table.add_row("ID", str(user.id))
-            table.add_row("Username", user.username)
-            table.add_row("Admin", "Yes" if user.is_admin else "No")
-            table.add_row("Active", "Yes" if user.is_active else "No")
-            table.add_row(
-                "Permissions",
-                ", ".join(user.permissions) if user.permissions else "None",
-            )
-            console.print(table)
+            # Output the SDK User model directly
+            output_sdk_result(ctx, user)
         finally:
             await session.close()
 
@@ -401,27 +463,8 @@ def user_list(ctx: click.Context, skip: int, limit: int):
                 limit=limit,
             )
 
-            if not users:
-                console.print("[yellow]No users found[/yellow]")
-                return
-
-            table = Table(title=f"Users ({len(users)} found)")
-            table.add_column("ID", style="cyan")
-            table.add_column("Username", style="green")
-            table.add_column("Admin", style="magenta")
-            table.add_column("Active", style="blue")
-            table.add_column("Permissions", style="yellow")
-
-            for user in users:
-                table.add_row(
-                    str(user.id),
-                    user.username,
-                    "✓" if user.is_admin else "",
-                    "✓" if user.is_active else "",
-                    ", ".join(user.permissions) if user.permissions else "",
-                )
-
-            console.print(table)
+            # For lists, output as JSON array directly
+            click.echo(json.dumps([u.model_dump(exclude_none=True) for u in users], indent=2))
         finally:
             await session.close()
 
@@ -446,22 +489,10 @@ def user_get(ctx: click.Context, user_id: int):
                 user_id=user_id,
             )
 
-            table = Table(title=f"User {user.username}")
-            table.add_column("Field", style="cyan")
-            table.add_column("Value", style="green")
-            table.add_row("ID", str(user.id))
-            table.add_row("Username", user.username)
-            table.add_row("Admin", "Yes" if user.is_admin else "No")
-            table.add_row("Active", "Yes" if user.is_active else "No")
-            table.add_row("Created", str(user.created_at))
-            table.add_row(
-                "Permissions",
-                ", ".join(user.permissions) if user.permissions else "None",
-            )
-            console.print(table)
+            # Output SDK User model directly
+            output_sdk_result(ctx, user)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await session.close()
 
@@ -515,22 +546,10 @@ def user_update(
                 user_update=user_update,
             )
 
-            console.print("[green]✓ User updated successfully[/green]")
-            table = Table(title=f"User {user.username}")
-            table.add_column("Field", style="cyan")
-            table.add_column("Value", style="green")
-            table.add_row("ID", str(user.id))
-            table.add_row("Username", user.username)
-            table.add_row("Admin", "Yes" if user.is_admin else "No")
-            table.add_row("Active", "Yes" if user.is_active else "No")
-            table.add_row(
-                "Permissions",
-                ", ".join(user.permissions) if user.permissions else "None",
-            )
-            console.print(table)
+            # Output SDK User model directly
+            output_sdk_result(ctx, user)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await session.close()
 
@@ -569,14 +588,13 @@ def user_delete(ctx: click.Context, user_id: int, yes: bool):
                 user_id=user_id,
             )
 
-            console.print(
-                f"[green]✓ User '{user.username}' deleted successfully[/green]"
-            )
+            # Output success response for void operation
+            success = SuccessResponse(message=f"User '{user.username}' deleted successfully")
+            output_sdk_result(ctx, success)
         except click.Abort:
-            console.print("[yellow]Deletion cancelled[/yellow]")
+            output_error(ctx, "Deletion cancelled")
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await session.close()
 
@@ -614,7 +632,6 @@ def list_entities(
         cl-client store list --search "vacation"
         cl-client store list --output entities.json
     """
-    import json
 
     async def run():
         manager = await get_store_manager(ctx)
@@ -626,57 +643,18 @@ def list_entities(
                 search_query=search,
             )
 
-            if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+            if result.is_error or result.data is None:
+                output_error(ctx, str(result.error) if result.is_error else "No data returned")
 
-            # Display results
-            if result.data is None:
-                console.print("[red]Error: No data returned[/red]")
-                sys.exit(1)
+            # Output SDK EntityListResult model directly
+            output_sdk_result(ctx, result.data)
 
-            entities = result.data.items
-            pagination = result.data.pagination
-
-            console.print(
-                f"[bold]Page {pagination.page}/{pagination.total_pages}[/bold] "
-                f"(Total: {pagination.total_items} entities)"
-            )
-
-            if entities:
-                table = Table(title="Entities")
-                table.add_column("ID", style="cyan")
-                table.add_column("Label", style="green")
-                table.add_column("Type", style="magenta")
-                table.add_column("Size", style="yellow")
-                table.add_column("Updated", style="blue")
-
-                for entity in entities:
-                    entity_type = "Collection" if entity.is_collection else "Media"
-                    size = f"{entity.file_size} bytes" if entity.file_size else "-"
-                    updated = (
-                        entity.updated_date_datetime.strftime("%Y-%m-%d %H:%M")
-                        if entity.updated_date_datetime
-                        else "-"
-                    )
-
-                    table.add_row(
-                        str(entity.id),
-                        entity.label or "(no label)",
-                        entity_type,
-                        size,
-                        updated,
-                    )
-
-                console.print(table)
-            else:
-                console.print("[yellow]No entities found[/yellow]")
-
-            # Save to file if requested
+            # Save to file if requested (works in both JSON and human mode)
             if output:
                 with open(output, "w") as f:
                     json.dump(result.data.model_dump(), f, indent=2, default=str)
-                console.print(f"\n[green]✓ Saved to {output}[/green]")
+                if not should_use_json(ctx):
+                    click.echo(f"Saved to {output}", err=True)
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -723,34 +701,11 @@ def create_entity(
                 image_path=file,
             )
 
-            if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+            if result.is_error or result.data is None:
+                output_error(ctx, str(result.error) if result.is_error else "No data returned")
 
-            if result.data is None:
-                console.print("[red]Error: No data returned[/red]")
-                sys.exit(1)
-
-            entity = result.data
-            console.print(f"[green]✓ Created entity [ID: {entity.id}][/green]")
-
-            table = Table(title=f"Entity {entity.id}")
-            table.add_column("Field", style="cyan")
-            table.add_column("Value", style="green")
-
-            table.add_row("Label", entity.label or "(no label)")
-            table.add_row("Type", "Collection" if entity.is_collection else "Media")
-            if entity.description:
-                table.add_row("Description", entity.description)
-            if entity.parent_id:
-                table.add_row("Parent ID", str(entity.parent_id))
-            if entity.file_path:
-                table.add_row("File", entity.file_path)
-                table.add_row("Size", f"{entity.file_size} bytes")
-                table.add_row("Dimensions", f"{entity.width}x{entity.height}")
-                table.add_row("MD5", entity.md5 or "")
-
-            console.print(table)
+            # Output SDK EntityResult model directly
+            output_sdk_result(ctx, result.data)
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -788,52 +743,18 @@ def get_entity(
         try:
             result = await manager.read_entity(entity_id=entity_id, version=version)
 
-            if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+            if result.is_error or result.data is None:
+                output_error(ctx, str(result.error) if result.is_error else "No data returned")
 
-            if result.data is None:
-                console.print("[red]Error: No data returned[/red]")
-                sys.exit(1)
+            # Output SDK EntityResult model directly
+            output_sdk_result(ctx, result.data)
 
-            entity = result.data
-            table = Table(title=f"Entity {entity.id}")
-            table.add_column("Field", style="cyan")
-            table.add_column("Value", style="green")
-
-            table.add_row("ID", str(entity.id))
-            table.add_row("Label", entity.label or "(no label)")
-            table.add_row("Description", entity.description or "")
-            table.add_row("Type", "Collection" if entity.is_collection else "Media")
-            table.add_row(
-                "Parent ID", str(entity.parent_id) if entity.parent_id else "-"
-            )
-            table.add_row(
-                "Created",
-                str(entity.create_date_datetime) if entity.create_date_datetime else "",
-            )
-            table.add_row(
-                "Updated",
-                (
-                    str(entity.updated_date_datetime)
-                    if entity.updated_date_datetime
-                    else ""
-                ),
-            )
-            table.add_row("Deleted", "Yes" if entity.is_deleted else "No")
-
-            if not entity.is_collection and entity.file_size:
-                table.add_row("File Size", f"{entity.file_size} bytes")
-                table.add_row("Dimensions", f"{entity.width}x{entity.height}")
-                table.add_row("MIME Type", entity.mime_type or "")
-                table.add_row("MD5", entity.md5 or "")
-
-            console.print(table)
-
+            # Save to file if requested
             if output:
                 with open(output, "w") as f:
-                    json.dump(entity.model_dump(), f, indent=2, default=str)
-                console.print(f"\n[green]✓ Saved to {output}[/green]")
+                    json.dump(result.data.model_dump(), f, indent=2, default=str)
+                if not should_use_json(ctx):
+                    click.echo(f"Saved to {output}", err=True)
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -884,10 +805,11 @@ def update_entity(
             )
 
             if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+                output_error(ctx, str(result.error))
 
-            console.print(f"[green]✓ Updated entity [ID: {entity_id}][/green]")
+            # Output success response for void operation
+            success = SuccessResponse(message=f"Updated entity [ID: {entity_id}]")
+            output_sdk_result(ctx, success)
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -947,11 +869,12 @@ def patch_entity(
             )
 
             if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+                output_error(ctx, str(result.error))
 
+            # Output success response for void operation
             action = "Deleted" if soft_delete else "Restored" if restore else "Updated"
-            console.print(f"[green]✓ {action} entity [ID: {entity_id}][/green]")
+            success = SuccessResponse(message=f"{action} entity [ID: {entity_id}]")
+            output_sdk_result(ctx, success)
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -981,28 +904,28 @@ def delete_entity(ctx: click.Context, entity_id: int, yes: bool):
             if not yes:
                 read_result = await manager.read_entity(entity_id=entity_id)
                 if read_result.is_error:
-                    console.print(f"[red]Error: {read_result.error}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, str(read_result.error))
 
                 if read_result.data is None:
-                    console.print("[red]Error: No data returned[/red]")
-                    sys.exit(1)
+                    output_error(ctx, "No data returned")
 
                 entity = read_result.data
+                entity_label = entity.label if entity.label else "(no label)"
                 click.confirm(
-                    f"Are you sure you want to permanently delete entity '{entity.label or '(no label)'}' (ID: {entity_id})?",
+                    f"Are you sure you want to permanently delete entity '{entity_label}' (ID: {entity_id})?",
                     abort=True,
                 )
 
             result = await manager.delete_entity(entity_id=entity_id)
 
             if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+                output_error(ctx, str(result.error))
 
-            console.print(f"[green]✓ Deleted entity [ID: {entity_id}][/green]")
+            # Output success response for void operation
+            success = SuccessResponse(message=f"Deleted entity [ID: {entity_id}]")
+            output_sdk_result(ctx, success)
         except click.Abort:
-            console.print("[yellow]Deletion cancelled[/yellow]")
+            output_error(ctx, "Deletion cancelled")
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -1033,43 +956,19 @@ def get_versions(ctx: click.Context, entity_id: int, output: Optional[Path]):
         try:
             result = await manager.get_versions(entity_id=entity_id)
 
-            if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+            if result.is_error or result.data is None:
+                output_error(ctx, str(result.error) if result.is_error else "No data returned")
 
-            if result.data is None:
-                console.print("[red]Error: No data returned[/red]")
-                sys.exit(1)
-
+            # Output SDK list of EntityVersion models as JSON array
             versions = result.data
-            console.print(f"[bold]Version history for entity [ID: {entity_id}][/bold]")
-            console.print(f"Total versions: {len(versions)}\n")
+            click.echo(json.dumps([v.model_dump(exclude_none=True) for v in versions], indent=2))
 
-            if versions:
-                table = Table(title="Versions")
-                table.add_column("Version", style="cyan")
-                table.add_column("Label", style="green")
-                table.add_column("Operation", style="magenta")
-                table.add_column("Transaction", style="yellow")
-
-                for v in versions:
-                    table.add_row(
-                        str(v.version),
-                        v.label or "(no label)",
-                        v.operation_type or "",
-                        str(v.transaction_id),
-                    )
-
-                console.print(table)
-            else:
-                console.print("[yellow]No version history found[/yellow]")
-
+            # Save to file if requested
             if output:
                 with open(output, "w") as f:
-                    json.dump(
-                        [v.model_dump() for v in versions], f, indent=2, default=str
-                    )
-                console.print(f"\n[green]✓ Saved to {output}[/green]")
+                    json.dump([v.model_dump() for v in versions], f, indent=2, default=str)
+                if not should_use_json(ctx):
+                    click.echo(f"Saved to {output}", err=True)
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -1099,41 +998,10 @@ def get_entity_jobs(ctx: click.Context, entity_id: int):
             # Access the store client directly for database methods
             jobs = await manager.store_client.get_entity_jobs(entity_id=entity_id)
 
-            console.print(f"[bold]Entity Jobs for ID: {entity_id}[/bold]")
-            console.print(f"Total jobs: {len(jobs)}\n")
-
-            if jobs:
-                table = Table(title="Jobs")
-                table.add_column("Job ID", style="cyan")
-                table.add_column("Task Type", style="green")
-                table.add_column("Status", style="magenta")
-                table.add_column("Created", style="yellow")
-                table.add_column("Error", style="red")
-
-                for job in jobs:
-                    # Status color based on job status
-                    status_text = job.status
-                    if job.status == "completed":
-                        status_text = f"[green]{job.status}[/green]"
-                    elif job.status == "failed":
-                        status_text = f"[red]{job.status}[/red]"
-                    elif job.status in ("queued", "in_progress"):
-                        status_text = f"[yellow]{job.status}[/yellow]"
-
-                    table.add_row(
-                        job.job_id[:16] + "..." if len(job.job_id) > 16 else job.job_id,
-                        job.task_type,
-                        status_text,
-                        str(job.created_at_datetime),
-                        job.error_message or "",
-                    )
-
-                console.print(table)
-            else:
-                console.print("[yellow]No jobs found for this entity[/yellow]")
+            # Output SDK list of Job models as JSON array
+            click.echo(json.dumps([j.model_dump(exclude_none=True) for j in jobs], indent=2))
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -1167,27 +1035,11 @@ def get_config(ctx: click.Context):
         try:
             result = await manager.get_config()
 
-            if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+            if result.is_error or result.data is None:
+                output_error(ctx, str(result.error) if result.is_error else "No data returned")
 
-            if result.data is None:
-                console.print("[red]Error: No data returned[/red]")
-                sys.exit(1)
-
-            config = result.data
-            table = Table(title="Store Configuration")
-            table.add_column("Setting", style="cyan")
-            table.add_column("Value", style="green")
-
-            table.add_row("Guest Mode", "Enabled" if config.guest_mode else "Disabled")
-            table.add_row(
-                "Updated At",
-                str(config.updated_at_datetime) if config.updated_at_datetime else "",
-            )
-            table.add_row("Updated By", config.updated_by or "")
-
-            console.print(table)
+            # Output SDK Config model directly
+            output_sdk_result(ctx, result.data)
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -1217,12 +1069,11 @@ def set_guest_mode(ctx: click.Context, enabled: bool):
             result = await manager.update_guest_mode(guest_mode=enabled)
 
             if result.is_error:
-                console.print(f"[red]Error: {result.error}[/red]")
-                sys.exit(1)
+                output_error(ctx, str(result.error))
 
-            console.print(
-                f"[green]✓ Guest mode {'enabled' if enabled else 'disabled'}[/green]"
-            )
+            # Output success response for void operation
+            success = SuccessResponse(message=f"Guest mode {'enabled' if enabled else 'disabled'}")
+            output_sdk_result(ctx, success)
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -1271,7 +1122,7 @@ def embed(  # type: ignore[reportRedeclaration]
             if watch:
                 # Real-time progress with MQTT
                 tracker = JobProgressTracker(
-                    job_id="pending", description=f"CLIP embedding: {image.name}"
+                    ctx, job_id="pending", description=f"CLIP embedding: {image.name}"
                 )
                 with tracker:
                     job = await client.clip_embedding.embed_image(
@@ -1283,8 +1134,7 @@ def embed(  # type: ignore[reportRedeclaration]
                     final_job = await tracker.wait(timeout=timeout)
 
                 if final_job and final_job.status == "completed":
-                    console.print("[green]✓ Embedding generated successfully[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
 
                     # Download if output specified
                     if (
@@ -1296,14 +1146,21 @@ def embed(  # type: ignore[reportRedeclaration]
                         await client.download_job_file(
                             final_job.job_id, str(output_path), output
                         )
-                        console.print(f"[green]✓ Downloaded to {output}[/green]")
+                        if not should_use_json(ctx):
+                            click.echo(f"Downloaded to {output}", err=True)
 
                 elif final_job:
-                    console.print(f"[red]✗ Job failed: {final_job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Job failed: {final_job.error_message}")
             else:
-                # Simple polling
-                with console.status(f"[bold green]Processing {image.name}..."):
+                # Simple polling (suppress status in JSON mode)
+                if not should_use_json(ctx):
+                    with console.status(f"[bold green]Processing {image.name}..."):
+                        job = await client.clip_embedding.embed_image(
+                            image=image,
+                            wait=True,
+                            timeout=timeout,
+                        )
+                else:
                     job = await client.clip_embedding.embed_image(
                         image=image,
                         wait=True,
@@ -1311,8 +1168,7 @@ def embed(  # type: ignore[reportRedeclaration]
                     )
 
                 if job.status == "completed":
-                    console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
 
                     # Download if output specified
                     if output and job.params and "output_path" in job.params:
@@ -1320,11 +1176,11 @@ def embed(  # type: ignore[reportRedeclaration]
                         await client.download_job_file(
                             job.job_id, str(output_path), output
                         )
-                        console.print(f"[green]✓ Downloaded to {output}[/green]")
+                        if not should_use_json(ctx):
+                            click.echo(f"Downloaded to {output}", err=True)
 
                 else:
-                    console.print(f"[red]✗ Failed: {job.error_message}[/red]")
-                    sys.exit(1)
+                    output_error(ctx, f"Failed: {job.error_message}")
         finally:
             await client.close()
             session = ctx.obj.get("session")
@@ -1377,6 +1233,7 @@ def generate(
         try:
             if watch:
                 tracker = JobProgressTracker(
+                    ctx,
                     job_id="pending",
                     description=f"Thumbnail: {media.name} ({width}x{height})",
                 )
@@ -1393,7 +1250,7 @@ def generate(
 
                 if final_job and final_job.status == "completed":
                     console.print("[green]✓ Thumbnail generated[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
 
                     # Download if output specified
                     if (
@@ -1421,7 +1278,7 @@ def generate(
 
                 if job.status == "completed":
                     console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
 
                     # Download if output specified
                     if output and job.params and "output_path" in job.params:
@@ -1475,7 +1332,7 @@ def compute(
         try:
             if watch:
                 tracker = JobProgressTracker(
-                    job_id="pending", description=f"Hashing: {image.name}"
+                    ctx, job_id="pending", description=f"Hashing: {image.name}"
                 )
                 with tracker:
                     job = await client.hash.compute(
@@ -1488,7 +1345,7 @@ def compute(
 
                 if final_job and final_job.status == "completed":
                     console.print("[green]✓ Hash computed[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
 
                     # Download if output specified
                     if (
@@ -1514,7 +1371,7 @@ def compute(
 
                 if job.status == "completed":
                     console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
 
                     # Download if output specified
                     if output and job.params and "output_path" in job.params:
@@ -1565,7 +1422,7 @@ def extract(
         try:
             if watch:
                 tracker = JobProgressTracker(
-                    job_id="pending", description=f"EXIF extraction: {image.name}"
+                    ctx, job_id="pending", description=f"EXIF extraction: {image.name}"
                 )
                 with tracker:
                     job = await client.exif.extract(
@@ -1578,7 +1435,7 @@ def extract(
 
                 if final_job and final_job.status == "completed":
                     console.print("[green]✓ EXIF extracted[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
 
                     # Download if output specified
                     if (
@@ -1604,7 +1461,7 @@ def extract(
 
                 if job.status == "completed":
                     console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
 
                     # Download if output specified
                     if output and job.params and "output_path" in job.params:
@@ -1655,7 +1512,7 @@ def detect(
         try:
             if watch:
                 tracker = JobProgressTracker(
-                    job_id="pending", description=f"Face detection: {image.name}"
+                    ctx, job_id="pending", description=f"Face detection: {image.name}"
                 )
                 with tracker:
                     job = await client.face_detection.detect(
@@ -1668,7 +1525,7 @@ def detect(
 
                 if final_job and final_job.status == "completed":
                     console.print("[green]✓ Faces detected[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
 
                     # Download if output specified
                     if (
@@ -1694,7 +1551,7 @@ def detect(
 
                 if job.status == "completed":
                     console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
 
                     # Download if output specified
                     if output and job.params and "output_path" in job.params:
@@ -1765,6 +1622,7 @@ def convert(
         try:
             if watch:
                 tracker = JobProgressTracker(
+                    ctx,
                     job_id="pending",
                     description=f"Converting {image.name} to {output_format}",
                 )
@@ -1781,7 +1639,7 @@ def convert(
 
                 if final_job and final_job.status == "completed":
                     console.print("[green]✓ Conversion completed[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
                     if (
                         output
                         and final_job.params
@@ -1807,7 +1665,7 @@ def convert(
 
                 if job.status == "completed":
                     console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]
                         await client.download_job_file(
@@ -1863,7 +1721,7 @@ def embed(  # type: ignore[reportRedeclaration]
         try:
             if watch:
                 tracker = JobProgressTracker(
-                    job_id="pending", description=f"DINO embedding: {image.name}"
+                    ctx, job_id="pending", description=f"DINO embedding: {image.name}"
                 )
                 with tracker:
                     job = await client.dino_embedding.embed_image(
@@ -1876,7 +1734,7 @@ def embed(  # type: ignore[reportRedeclaration]
 
                 if final_job and final_job.status == "completed":
                     console.print("[green]✓ Embedding generated[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
                     if (
                         output
                         and final_job.params
@@ -1900,7 +1758,7 @@ def embed(  # type: ignore[reportRedeclaration]
 
                 if job.status == "completed":
                     console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]
                         await client.download_job_file(
@@ -1949,7 +1807,7 @@ def embed(
         try:
             if watch:
                 tracker = JobProgressTracker(
-                    job_id="pending", description=f"Face embedding: {image.name}"
+                    ctx, job_id="pending", description=f"Face embedding: {image.name}"
                 )
                 with tracker:
                     job = await client.face_embedding.embed_faces(
@@ -1962,7 +1820,7 @@ def embed(
 
                 if final_job and final_job.status == "completed":
                     console.print("[green]✓ Embeddings generated[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
                     if (
                         output
                         and final_job.params
@@ -1986,7 +1844,7 @@ def embed(
 
                 if job.status == "completed":
                     console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]
                         await client.download_job_file(
@@ -2038,7 +1896,7 @@ def generate_manifest(
         try:
             if watch:
                 tracker = JobProgressTracker(
-                    job_id="pending", description=f"HLS manifest: {video.name}"
+                    ctx, job_id="pending", description=f"HLS manifest: {video.name}"
                 )
                 with tracker:
                     job = await client.hls_streaming.generate_manifest(
@@ -2051,7 +1909,7 @@ def generate_manifest(
 
                 if final_job and final_job.status == "completed":
                     console.print("[green]✓ HLS manifest generated[/green]")
-                    print_job_result(final_job)
+                    print_job_result(ctx, final_job)
                     if (
                         output
                         and final_job.params
@@ -2075,7 +1933,7 @@ def generate_manifest(
 
                 if job.status == "completed":
                     console.print("[green]✓ Completed[/green]")
-                    print_job_result(job)
+                    print_job_result(ctx, job)
                     if output and job.params and "output_path" in job.params:
                         output_path = job.params["output_path"]
                         await client.download_job_file(
@@ -2119,37 +1977,10 @@ def list_faces(ctx: click.Context, entity_id: int):
         try:
             faces = await manager.store_client.get_entity_faces(entity_id=entity_id)
 
-            console.print(f"[bold]Faces in Entity ID: {entity_id}[/bold]")
-            console.print(f"Total faces: {len(faces)}\n")
-
-            if faces:
-                table = Table(title="Detected Faces")
-                table.add_column("Face ID", style="cyan")
-                table.add_column("Confidence", style="green")
-                table.add_column("BBox (x1,y1,x2,y2)", style="yellow")
-                table.add_column("Known Person", style="magenta")
-                table.add_column("Created", style="white")
-
-                for face in faces:
-                    bbox_str = f"({face.bbox.x1:.0f},{face.bbox.y1:.0f},{face.bbox.x2:.0f},{face.bbox.y2:.0f})"
-                    person_str = (
-                        str(face.known_person_id) if face.known_person_id else "Unknown"
-                    )
-
-                    table.add_row(
-                        str(face.id),
-                        f"{face.confidence:.2f}",
-                        bbox_str,
-                        person_str,
-                        str(face.created_at_datetime),
-                    )
-
-                console.print(table)
-            else:
-                console.print("[yellow]No faces found in this entity[/yellow]")
+            # Output SDK list of Face models as JSON array
+            click.echo(json.dumps([f.model_dump(exclude_none=True) for f in faces], indent=2))
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2188,28 +2019,10 @@ def find_similar_faces(ctx: click.Context, face_id: int, limit: int, threshold: 
                 threshold=threshold,
             )
 
-            console.print(f"[bold]Similar Faces for Face ID: {face_id}[/bold]")
-            console.print(f"Found {len(response.results)} similar faces\n")
-
-            if response.results:
-                table = Table(title=f"Similar Faces (threshold >= {threshold})")
-                table.add_column("Face ID", style="cyan")
-                table.add_column("Similarity Score", style="green")
-
-                for result in response.results:
-                    table.add_row(
-                        str(result.face_id),
-                        f"{result.score:.4f}",
-                    )
-
-                console.print(table)
-            else:
-                console.print(
-                    f"[yellow]No similar faces found (threshold: {threshold})[/yellow]"
-                )
+            # Output SDK SimilaritySearchResponse model directly
+            output_sdk_result(ctx, response)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2244,10 +2057,11 @@ def download_face_embedding(ctx: click.Context, face_id: int, output: Path):
                 face_id=face_id,
                 dest=output,
             )
-            console.print(f"[green]✓ Face embedding downloaded to {output}[/green]")
+            # Output success response for download operation
+            success = SuccessResponse(message=f"Face embedding downloaded to {output}")
+            output_sdk_result(ctx, success)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2273,30 +2087,10 @@ def get_face_matches(ctx: click.Context, face_id: int):
         try:
             matches = await manager.store_client.get_face_matches(face_id=face_id)
 
-            console.print(f"[bold]Match History for Face ID: {face_id}[/bold]")
-            console.print(f"Total matches: {len(matches)}\n")
-
-            if matches:
-                table = Table(title="Face Matches")
-                table.add_column("Match ID", style="cyan")
-                table.add_column("Matched Face ID", style="green")
-                table.add_column("Similarity", style="yellow")
-                table.add_column("Created", style="white")
-
-                for match in matches:
-                    table.add_row(
-                        str(match.id),
-                        str(match.matched_face_id),
-                        f"{match.similarity_score:.4f}",
-                        str(match.created_at_datetime),
-                    )
-
-                console.print(table)
-            else:
-                console.print("[yellow]No match history found[/yellow]")
+            # Output SDK list of FaceMatch models as JSON array
+            click.echo(json.dumps([m.model_dump(exclude_none=True) for m in matches], indent=2))
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2330,34 +2124,10 @@ def list_persons(ctx: click.Context):
         try:
             persons = await manager.store_client.get_all_known_persons()
 
-            console.print(f"[bold]Known Persons[/bold]")
-            console.print(f"Total persons: {len(persons)}\n")
-
-            if persons:
-                table = Table(title="Known Persons")
-                table.add_column("Person ID", style="cyan")
-                table.add_column("Name", style="green")
-                table.add_column("Face Count", style="yellow")
-                table.add_column("Created", style="white")
-
-                for person in persons:
-                    table.add_row(
-                        str(person.id),
-                        person.name or "(no name)",
-                        (
-                            str(person.face_count)
-                            if person.face_count is not None
-                            else "N/A"
-                        ),
-                        str(person.created_at_datetime),
-                    )
-
-                console.print(table)
-            else:
-                console.print("[yellow]No known persons found[/yellow]")
+            # Output SDK list of KnownPerson models as JSON array
+            click.echo(json.dumps([p.model_dump(exclude_none=True) for p in persons], indent=2))
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2383,24 +2153,10 @@ def get_person(ctx: click.Context, person_id: int):
         try:
             person = await manager.store_client.get_known_person(person_id=person_id)
 
-            console.print(f"[bold]Person ID: {person.id}[/bold]\n")
-
-            table = Table(title="Person Details")
-            table.add_column("Field", style="cyan")
-            table.add_column("Value", style="green")
-
-            table.add_row("Name", person.name or "(no name)")
-            table.add_row(
-                "Face Count",
-                str(person.face_count) if person.face_count is not None else "N/A",
-            )
-            table.add_row("Created", str(person.created_at_datetime))
-            table.add_row("Updated", str(person.updated_at_datetime))
-
-            console.print(table)
+            # Output SDK KnownPerson model directly
+            output_sdk_result(ctx, person)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2430,11 +2186,10 @@ def update_person(ctx: click.Context, person_id: int, name: str):
                 name=name,
             )
 
-            console.print(f"[green]✓ Updated person {person_id}[/green]")
-            console.print(f"New name: {person.name}")
+            # Output SDK KnownPerson model directly
+            output_sdk_result(ctx, person)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2462,34 +2217,10 @@ def get_person_faces(ctx: click.Context, person_id: int):
                 person_id=person_id
             )
 
-            console.print(f"[bold]Faces for Person ID: {person_id}[/bold]")
-            console.print(f"Total faces: {len(faces)}\n")
-
-            if faces:
-                table = Table(title="Person Faces")
-                table.add_column("Face ID", style="cyan")
-                table.add_column("Entity ID", style="green")
-                table.add_column("Confidence", style="yellow")
-                table.add_column("BBox (x1,y1,x2,y2)", style="magenta")
-                table.add_column("Created", style="white")
-
-                for face in faces:
-                    bbox_str = f"({face.bbox.x1:.0f},{face.bbox.y1:.0f},{face.bbox.x2:.0f},{face.bbox.y2:.0f})"
-
-                    table.add_row(
-                        str(face.id),
-                        str(face.entity_id),
-                        f"{face.confidence:.2f}",
-                        bbox_str,
-                        str(face.created_at_datetime),
-                    )
-
-                console.print(table)
-            else:
-                console.print("[yellow]No faces found for this person[/yellow]")
+            # Output SDK list of Face models as JSON array
+            click.echo(json.dumps([f.model_dump(exclude_none=True) for f in faces], indent=2))
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2544,37 +2275,10 @@ def find_similar_images(
                 include_details=details,
             )
 
-            console.print(f"[bold]Similar Images for Entity ID: {entity_id}[/bold]")
-            console.print(f"Found {len(response.results)} similar images\n")
-
-            if response.results:
-                table = Table(title=f"Similar Images (threshold >= {threshold})")
-                table.add_column("Entity ID", style="cyan")
-                table.add_column("Similarity Score", style="green")
-                if details:
-                    table.add_column("Label", style="yellow")
-
-                for result in response.results:
-                    if details and result.entity:
-                        table.add_row(
-                            str(result.entity_id),
-                            f"{result.score:.4f}",
-                            result.entity.label or "(no label)",
-                        )
-                    else:
-                        table.add_row(
-                            str(result.entity_id),
-                            f"{result.score:.4f}",
-                        )
-
-                console.print(table)
-            else:
-                console.print(
-                    f"[yellow]No similar images found (threshold: {threshold})[/yellow]"
-                )
+            # Output SDK SimilaritySearchResponse model directly
+            output_sdk_result(ctx, response)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")
@@ -2609,12 +2313,11 @@ def download_entity_embedding(ctx: click.Context, entity_id: int, output: Path):
                 entity_id=entity_id,
                 dest=output,
             )
-            console.print(
-                f"[green]✓ Entity CLIP embedding downloaded to {output}[/green]"
-            )
+            # Output success response for download operation
+            success = SuccessResponse(message=f"Entity CLIP embedding downloaded to {output}")
+            output_sdk_result(ctx, success)
         except Exception as e:
-            console.print(f"[red]Error: {e}[/red]")
-            sys.exit(1)
+            output_error(ctx, str(e))
         finally:
             await manager.__aexit__(None, None, None)
             session = ctx.obj.get("session")

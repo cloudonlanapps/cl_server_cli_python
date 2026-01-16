@@ -18,8 +18,16 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
+from cl_client.store_client import (
+    FaceResponse,
+    KnownPersonResponse,
+    SimilarFacesResponse,
+    SimilarImagesResponse,
+    FaceMatchResult,
+    EntityJobResponse,
+)
 
-from .conftest import SyncTestHelper
+from .conftest import SyncTestHelper, parse_cli_json, parse_cli_json_list, assert_cli_success
 
 
 @pytest.mark.integration
@@ -33,7 +41,7 @@ class TestJobTracking:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test jobs command shows job status after entity upload."""
+        """Test jobs command shows job status after entity upload with JSON output."""
         # Create entity with file upload (triggers compute jobs)
         entity_id = test_helper.create_test_entity(
             label="test_jobs_tracking",
@@ -42,8 +50,7 @@ class TestJobTracking:
 
         assert entity_id is not None, "Failed to create entity"
 
-        # Test jobs command - it should query job status immediately
-        # No need to wait since we're just checking if the command works
+        # Test jobs command with JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -55,15 +62,18 @@ class TestJobTracking:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "store",
                 "jobs",
                 str(entity_id),
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Entity Jobs for ID: {entity_id}" in cli_result.output
-        assert "Total jobs:" in cli_result.output
+        # Parse and validate with SDK EntityJobResponse model
+        job_response = parse_cli_json(cli_result, EntityJobResponse)
+        assert job_response.entity_id == entity_id
+        assert hasattr(job_response, "jobs")
+        assert isinstance(job_response.jobs, list)
 
 
 @pytest.mark.integration
@@ -77,7 +87,7 @@ class TestFaceCommands:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test faces list command shows detected faces."""
+        """Test faces list command shows detected faces with JSON output."""
         # Upload image with faces
         entity_id = test_helper.create_test_entity(
             label="test_faces_list",
@@ -90,7 +100,7 @@ class TestFaceCommands:
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
 
-        # Test faces list command
+        # Test faces list command with JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -102,15 +112,17 @@ class TestFaceCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "faces",
                 "list",
                 str(entity_id),
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Faces in Entity ID: {entity_id}" in cli_result.output
-        assert "Total faces:" in cli_result.output
+        # Parse list of FaceResponse models
+        faces = parse_cli_json_list(cli_result, FaceResponse)
+        assert len(faces) > 0
+        assert faces[0].entity_id == entity_id
 
     def test_faces_similar_command(
         self,
@@ -119,7 +131,7 @@ class TestFaceCommands:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test faces similar command for face similarity search."""
+        """Test faces similar command for face similarity search with JSON output."""
         # Upload image with face
         entity_id = test_helper.create_test_entity(
             label="test_faces_similar",
@@ -132,7 +144,7 @@ class TestFaceCommands:
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
 
-        # Test faces similar command
+        # Test faces similar command with JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -144,6 +156,7 @@ class TestFaceCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "faces",
                 "similar",
                 str(face_id),
@@ -154,10 +167,10 @@ class TestFaceCommands:
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Similar Faces for Face ID: {face_id}" in cli_result.output
-        assert "Found" in cli_result.output
-        assert "similar faces" in cli_result.output
+        # Parse and validate with SDK SimilarFacesResponse model
+        response = parse_cli_json(cli_result, SimilarFacesResponse)
+        assert hasattr(response, "results")
+        assert isinstance(response.results, list)
 
     def test_faces_download_embedding(
         self,
@@ -167,7 +180,7 @@ class TestFaceCommands:
         test_image: Path,
         tmp_path: Path,
     ):
-        """Test faces download-embedding command."""
+        """Test faces download-embedding command with JSON output."""
         # Upload image with face
         entity_id = test_helper.create_test_entity(
             label="test_faces_download_embedding",
@@ -180,7 +193,7 @@ class TestFaceCommands:
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
 
-        # Test download-embedding command
+        # Test download-embedding command with JSON output
         output_file = tmp_path / "face_embedding.npy"
         cli_result = cli_runner.invoke(
             cli,
@@ -193,6 +206,7 @@ class TestFaceCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "faces",
                 "download-embedding",
                 str(face_id),
@@ -201,8 +215,8 @@ class TestFaceCommands:
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert "Face embedding downloaded" in cli_result.output
+        # Validate success response
+        assert_cli_success(cli_result, "Face embedding downloaded")
         assert output_file.exists(), "Embedding file was not created"
         assert output_file.stat().st_size > 0, "Embedding file is empty"
 
@@ -213,7 +227,7 @@ class TestFaceCommands:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test faces matches command for face match history."""
+        """Test faces matches command for face match history with JSON output."""
         # Upload image with face
         entity_id = test_helper.create_test_entity(
             label="test_faces_matches",
@@ -226,7 +240,7 @@ class TestFaceCommands:
         face_id = test_helper.wait_for_faces(entity_id)
         assert face_id is not None, "Face detection did not complete in time"
 
-        # Test matches command
+        # Test matches command with JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -238,15 +252,17 @@ class TestFaceCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "faces",
                 "matches",
                 str(face_id),
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Match History for Face ID: {face_id}" in cli_result.output
-        assert "Total matches:" in cli_result.output
+        # Parse list of FaceMatchResult models
+        matches = parse_cli_json_list(cli_result, FaceMatchResult)
+        assert isinstance(matches, list)
+        # May be empty if no matches yet
 
 
 @pytest.mark.integration
@@ -258,7 +274,7 @@ class TestPersonsCommands:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test persons list command."""
+        """Test persons list command with JSON output."""
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -270,14 +286,16 @@ class TestPersonsCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "persons",
                 "list",
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert "Known Persons" in cli_result.output
-        assert "Total persons:" in cli_result.output
+        # Parse list of KnownPersonResponse models
+        persons = parse_cli_json_list(cli_result, KnownPersonResponse)
+        assert isinstance(persons, list)
+        # May be empty if no persons yet
 
     def test_persons_get_update_commands(
         self,
@@ -286,7 +304,7 @@ class TestPersonsCommands:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test persons get and update commands."""
+        """Test persons get and update commands with JSON output."""
         # Upload image with face to create a person
         entity_id = test_helper.create_test_entity(
             label="test_persons_update",
@@ -299,7 +317,7 @@ class TestPersonsCommands:
         person_id = test_helper.wait_for_person(entity_id)
         assert person_id is not None, "Person creation did not complete in time"
 
-        # Test persons get command
+        # Test persons get command with JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -311,17 +329,18 @@ class TestPersonsCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "persons",
                 "get",
                 str(person_id),
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Person ID: {person_id}" in cli_result.output
-        assert "Person Details" in cli_result.output
+        # Parse and validate with SDK KnownPersonResponse model
+        person = parse_cli_json(cli_result, KnownPersonResponse)
+        assert person.id == person_id
 
-        # Test persons update command
+        # Test persons update command with JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -333,6 +352,7 @@ class TestPersonsCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "persons",
                 "update",
                 str(person_id),
@@ -341,9 +361,10 @@ class TestPersonsCommands:
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Updated person {person_id}" in cli_result.output
-        assert "Test Person" in cli_result.output
+        # Parse updated person
+        updated_person = parse_cli_json(cli_result, KnownPersonResponse)
+        assert updated_person.id == person_id
+        assert updated_person.name == "Test Person"
 
     def test_persons_faces_command(
         self,
@@ -352,7 +373,7 @@ class TestPersonsCommands:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test persons faces command."""
+        """Test persons faces command with JSON output."""
         # Upload image with face
         entity_id = test_helper.create_test_entity(
             label="test_persons_faces",
@@ -365,7 +386,7 @@ class TestPersonsCommands:
         person_id = test_helper.wait_for_person(entity_id)
         assert person_id is not None, "Person creation did not complete in time"
 
-        # Test persons faces command
+        # Test persons faces command with JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -377,15 +398,19 @@ class TestPersonsCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "persons",
                 "faces",
                 str(person_id),
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Faces for Person ID: {person_id}" in cli_result.output
-        assert "Total faces:" in cli_result.output
+        # Parse list of FaceResponse models
+        faces = parse_cli_json_list(cli_result, FaceResponse)
+        assert len(faces) > 0
+        # All faces should belong to this person
+        for face in faces:
+            assert face.known_person_id == person_id
 
 
 @pytest.mark.integration
@@ -399,7 +424,7 @@ class TestImagesCommands:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test images similar command for CLIP-based similarity."""
+        """Test images similar command for CLIP-based similarity with JSON output."""
         # Upload image
         entity_id = test_helper.create_test_entity(
             label="test_images_similar",
@@ -412,7 +437,7 @@ class TestImagesCommands:
         clip_ready = test_helper.wait_for_clip_embedding(entity_id)
         assert clip_ready, "CLIP embedding did not complete in time"
 
-        # Test images similar command
+        # Test images similar command with JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -424,6 +449,7 @@ class TestImagesCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "images",
                 "similar",
                 str(entity_id),
@@ -434,10 +460,10 @@ class TestImagesCommands:
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Similar Images for Entity ID: {entity_id}" in cli_result.output
-        assert "Found" in cli_result.output
-        assert "similar images" in cli_result.output
+        # Parse and validate with SDK SimilarImagesResponse model
+        response = parse_cli_json(cli_result, SimilarImagesResponse)
+        assert hasattr(response, "results")
+        assert isinstance(response.results, list)
 
     def test_images_similar_with_details(
         self,
@@ -446,7 +472,7 @@ class TestImagesCommands:
         test_helper: SyncTestHelper,
         test_image: Path,
     ):
-        """Test images similar command with --details flag."""
+        """Test images similar command with --details flag and JSON output."""
         # Upload image
         entity_id = test_helper.create_test_entity(
             label="test_images_similar_details",
@@ -459,7 +485,7 @@ class TestImagesCommands:
         clip_ready = test_helper.wait_for_clip_embedding(entity_id)
         assert clip_ready, "CLIP embedding did not complete in time"
 
-        # Test images similar with details
+        # Test images similar with details and JSON output
         cli_result = cli_runner.invoke(
             cli,
             [
@@ -471,6 +497,7 @@ class TestImagesCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "images",
                 "similar",
                 str(entity_id),
@@ -478,8 +505,10 @@ class TestImagesCommands:
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert f"Similar Images for Entity ID: {entity_id}" in cli_result.output
+        # Parse and validate with SDK SimilarImagesResponse model
+        response = parse_cli_json(cli_result, SimilarImagesResponse)
+        assert hasattr(response, "results")
+        assert isinstance(response.results, list)
 
     def test_images_download_embedding(
         self,
@@ -489,7 +518,7 @@ class TestImagesCommands:
         test_image: Path,
         tmp_path: Path,
     ):
-        """Test images download-embedding command."""
+        """Test images download-embedding command with JSON output."""
         # Upload image
         entity_id = test_helper.create_test_entity(
             label="test_images_download_embedding",
@@ -502,7 +531,7 @@ class TestImagesCommands:
         clip_ready = test_helper.wait_for_clip_embedding(entity_id)
         assert clip_ready, "CLIP embedding did not complete in time"
 
-        # Test download-embedding command
+        # Test download-embedding command with JSON output
         output_file = tmp_path / "clip_embedding.npy"
         cli_result = cli_runner.invoke(
             cli,
@@ -515,6 +544,7 @@ class TestImagesCommands:
                 cli_env["CL_AUTH_URL"],
                 "--store-url",
                 cli_env["CL_STORE_URL"],
+                "--json",
                 "images",
                 "download-embedding",
                 str(entity_id),
@@ -523,7 +553,7 @@ class TestImagesCommands:
             ],
         )
 
-        assert cli_result.exit_code == 0, f"CLI failed: {cli_result.output}"
-        assert "Entity CLIP embedding downloaded" in cli_result.output
+        # Validate success response
+        assert_cli_success(cli_result, "Entity CLIP embedding downloaded")
         assert output_file.exists(), "Embedding file was not created"
         assert output_file.stat().st_size > 0, "Embedding file is empty"

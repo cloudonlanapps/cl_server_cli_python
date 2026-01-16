@@ -15,6 +15,9 @@ import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
+from cl_client.models import JobResponse
+
+from .conftest import parse_cli_json, assert_cli_error
 
 
 @pytest.mark.integration
@@ -27,8 +30,8 @@ class TestClipEmbeddingCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test clip-embedding embed with HTTP polling (default behavior)."""
-        # Execute CLI command (uses wait=True by default)
+        """Test clip-embedding embed with HTTP polling and JSON output."""
+        # Execute CLI command with JSON output (uses wait=True by default)
         result = cli_runner.invoke(
             cli,
             [
@@ -38,21 +41,17 @@ class TestClipEmbeddingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "clip-embedding",
                 "embed",
                 str(test_image),
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
-        # Should show job ID in output
-        assert (
-            "test-job" in result.output
-            or "job_id" in result.output.lower()
-            or len(result.output) > 0
-        )
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "clip_embedding"
 
     def test_clip_embed_mqtt_callbacks(
         self,
@@ -60,8 +59,8 @@ class TestClipEmbeddingCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test clip-embedding embed with MQTT callbacks (--watch flag)."""
-        # Execute CLI command with --watch for MQTT updates
+        """Test clip-embedding embed with MQTT callbacks (--watch flag) and JSON output."""
+        # Execute CLI command with --watch for MQTT updates and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -71,6 +70,7 @@ class TestClipEmbeddingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "clip-embedding",
                 "embed",
                 "--watch",
@@ -78,9 +78,10 @@ class TestClipEmbeddingCLI:
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "clip_embedding"
 
     def test_clip_embed_with_output(
         self,
@@ -89,10 +90,10 @@ class TestClipEmbeddingCLI:
         test_image: Path,
         tmp_path: Path,
     ):
-        """Test clip-embedding embed with output file download."""
+        """Test clip-embedding embed with output file download and JSON output."""
         output_file = tmp_path / "embedding.npy"
 
-        # Execute CLI command with -o flag to download embedding
+        # Execute CLI command with -o flag to download embedding and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -102,6 +103,7 @@ class TestClipEmbeddingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "clip-embedding",
                 "embed",
                 str(test_image),
@@ -110,9 +112,10 @@ class TestClipEmbeddingCLI:
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "clip_embedding"
         # Embedding file should be downloaded
         assert output_file.exists(), f"Embedding file not created at {output_file}"
         assert output_file.stat().st_size > 0, "Embedding file is empty"
@@ -122,8 +125,8 @@ class TestClipEmbeddingCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
     ):
-        """Test clip-embedding embed with missing file."""
-        # Execute CLI command with non-existent file
+        """Test clip-embedding embed with missing file returns JSON error."""
+        # Execute CLI command with non-existent file and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -133,20 +136,15 @@ class TestClipEmbeddingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "clip-embedding",
                 "embed",
                 "/nonexistent/file.jpg",
             ],
         )
 
-        # Should fail with non-zero exit code
-        assert result.exit_code != 0, "Command should fail for missing file"
-        # Should show error message
-        assert (
-            "error" in result.output.lower()
-            or "not found" in result.output.lower()
-            or "does not exist" in result.output.lower()
-        )
+        # Validate JSON error response
+        assert_cli_error(result)
 
     def test_clip_embed_with_timeout(
         self,
@@ -154,8 +152,8 @@ class TestClipEmbeddingCLI:
         cli_env: dict[str, str],
         test_image: Path,
     ):
-        """Test clip-embedding embed with custom timeout."""
-        # Execute CLI command with --timeout flag
+        """Test clip-embedding embed with custom timeout and JSON output."""
+        # Execute CLI command with --timeout flag and JSON output
         result = cli_runner.invoke(
             cli,
             [
@@ -165,6 +163,7 @@ class TestClipEmbeddingCLI:
                 cli_env["CL_PASSWORD"],
                 "--compute-url",
                 cli_env["CL_COMPUTE_URL"],
+                "--json",
                 "clip-embedding",
                 "embed",
                 str(test_image),
@@ -173,6 +172,7 @@ class TestClipEmbeddingCLI:
             ],
         )
 
-        # Verify command succeeded
-        assert result.exit_code == 0, f"CLI failed: {result.output}"
-        assert "completed" in result.output.lower() or "✓" in result.output
+        # Parse and validate with SDK JobResponse model
+        job = parse_cli_json(result, JobResponse)
+        assert job.status == "completed"
+        assert job.task_type == "clip_embedding"
