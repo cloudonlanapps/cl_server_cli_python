@@ -702,6 +702,7 @@ class TestStoreCommands:
 
     def test_store_create_collection(self, mock_store_manager, sample_collection):
         """Test creating a collection."""
+        import json
         mock_store_manager.create_entity.return_value = StoreOperationResult[Entity](
             success="Entity created successfully",
             data=sample_collection,
@@ -714,13 +715,18 @@ class TestStoreCommands:
         )
 
         assert result.exit_code == 0
-        assert "Created entity" in result.output
+        # Parse JSON output and verify entity data
+        output_data = json.loads(result.output)
+        assert output_data["id"] == 2
+        assert output_data["is_collection"] is True
+        assert output_data["label"] == "Test Collection"
         call_kwargs = mock_store_manager.create_entity.call_args[1]
         assert call_kwargs["label"] == "Test Collection"
         assert call_kwargs["is_collection"] is True
 
     def test_store_create_with_file(self, mock_store_manager, sample_entity, temp_image_file):
         """Test creating entity with file upload."""
+        import json
         mock_store_manager.create_entity.return_value = StoreOperationResult[Entity](
             success="Entity created successfully",
             data=sample_entity,
@@ -742,7 +748,10 @@ class TestStoreCommands:
         )
 
         assert result.exit_code == 0
-        assert "Created entity" in result.output
+        # Parse JSON output and verify entity data
+        output_data = json.loads(result.output)
+        assert output_data["id"] == 1
+        assert output_data["label"] == "Test Entity"
         call_kwargs = mock_store_manager.create_entity.call_args[1]
         assert call_kwargs["label"] == "Photo"
         assert call_kwargs["description"] == "Test photo"
@@ -848,6 +857,7 @@ class TestStoreCommands:
 
     def test_store_admin_config(self, mock_store_manager, sample_store_config):
         """Test store admin config command."""
+        import json
         mock_store_manager.get_config.return_value = StoreOperationResult(
             success="Configuration retrieved successfully",
             data=sample_store_config,
@@ -857,8 +867,10 @@ class TestStoreCommands:
         result = runner.invoke(cli, ["store", "admin", "config"])
 
         assert result.exit_code == 0
-        assert "Store Configuration" in result.output
-        assert "Disabled" in result.output  # guest_mode is displayed as "Disabled"
+        # Parse JSON output and verify config data
+        output_data = json.loads(result.output)
+        assert output_data["guest_mode"] is False
+        assert "updated_at" in output_data
         mock_store_manager.get_config.assert_called_once()
 
     def test_store_admin_set_guest_mode(self, mock_store_manager, sample_store_config):
@@ -916,37 +928,49 @@ class TestNewDatabaseCommands:
 
     def test_store_jobs(self, mock_store_manager, sample_entity_job):
         """Test store jobs command."""
+        import json
         mock_store_manager.store_client.get_entity_jobs.return_value = [sample_entity_job]
 
         runner = CliRunner()
         result = runner.invoke(cli, ["store", "jobs", "123"])
 
         assert result.exit_code == 0
-        assert "Entity Jobs for ID: 123" in result.output
-        assert "Total jobs: 1" in result.output
+        # Parse JSON output and verify jobs array
+        output_data = json.loads(result.output)
+        assert isinstance(output_data, list)
+        assert len(output_data) == 1
+        assert output_data[0]["entity_id"] == 123
         mock_store_manager.store_client.get_entity_jobs.assert_called_once_with(entity_id=123)
 
     def test_faces_list(self, mock_store_manager, sample_face):
         """Test faces list command."""
+        import json
         mock_store_manager.store_client.get_entity_faces.return_value = [sample_face]
 
         runner = CliRunner()
         result = runner.invoke(cli, ["faces", "list", "123"])
 
         assert result.exit_code == 0
-        assert "Faces in Entity ID: 123" in result.output
-        assert "Total faces: 1" in result.output
+        # Parse JSON output and verify faces array
+        output_data = json.loads(result.output)
+        assert isinstance(output_data, list)
+        assert len(output_data) == 1
+        assert output_data[0]["id"] == 456
         mock_store_manager.store_client.get_entity_faces.assert_called_once_with(entity_id=123)
 
     def test_faces_similar(self, mock_store_manager, sample_similar_faces_response):
         """Test faces similar command."""
+        import json
         mock_store_manager.store_client.find_similar_faces.return_value = sample_similar_faces_response
 
         runner = CliRunner()
         result = runner.invoke(cli, ["faces", "similar", "456", "--limit", "10", "--threshold", "0.7"])
 
         assert result.exit_code == 0
-        assert "Similar Faces for Face ID: 456" in result.output
+        # Parse JSON output and verify similar faces response
+        output_data = json.loads(result.output)
+        assert "query_face_id" in output_data
+        assert output_data["query_face_id"] == 456
         mock_store_manager.store_client.find_similar_faces.assert_called_once_with(
             face_id=456,
             limit=10,
@@ -967,48 +991,64 @@ class TestNewDatabaseCommands:
 
     def test_faces_matches(self, mock_store_manager, sample_face_match):
         """Test faces matches command."""
+        import json
         mock_store_manager.store_client.get_face_matches.return_value = [sample_face_match]
 
         runner = CliRunner()
         result = runner.invoke(cli, ["faces", "matches", "456"])
 
         assert result.exit_code == 0
-        assert "Match History for Face ID: 456" in result.output
-        assert "Total matches: 1" in result.output
+        # Parse JSON output and verify matches array
+        output_data = json.loads(result.output)
+        assert isinstance(output_data, list)
+        assert len(output_data) == 1
+        assert output_data[0]["face_id"] == 456
         mock_store_manager.store_client.get_face_matches.assert_called_once_with(face_id=456)
 
     def test_persons_list(self, mock_store_manager, sample_known_person):
         """Test persons list command."""
+        import json
         mock_store_manager.store_client.get_all_known_persons.return_value = [sample_known_person]
 
         runner = CliRunner()
         result = runner.invoke(cli, ["persons", "list"])
 
         assert result.exit_code == 0
-        assert "Known Persons" in result.output
-        assert "Total persons: 1" in result.output
+        # Parse JSON output and verify persons array
+        output_data = json.loads(result.output)
+        assert isinstance(output_data, list)
+        assert len(output_data) == 1
+        assert output_data[0]["id"] == 789
         mock_store_manager.store_client.get_all_known_persons.assert_called_once()
 
     def test_persons_get(self, mock_store_manager, sample_known_person):
         """Test persons get command."""
+        import json
         mock_store_manager.store_client.get_known_person.return_value = sample_known_person
 
         runner = CliRunner()
         result = runner.invoke(cli, ["persons", "get", "789"])
 
         assert result.exit_code == 0
-        assert "Person ID: 789" in result.output
+        # Parse JSON output and verify person data
+        output_data = json.loads(result.output)
+        assert output_data["id"] == 789
+        assert output_data["name"] == "John Doe"
         mock_store_manager.store_client.get_known_person.assert_called_once_with(person_id=789)
 
     def test_persons_update(self, mock_store_manager, sample_known_person):
         """Test persons update command."""
+        import json
         mock_store_manager.store_client.update_known_person_name.return_value = sample_known_person
 
         runner = CliRunner()
         result = runner.invoke(cli, ["persons", "update", "789", "--name", "Jane Doe"])
 
         assert result.exit_code == 0
-        assert "Updated person 789" in result.output
+        # Parse JSON output and verify person data
+        output_data = json.loads(result.output)
+        assert output_data["id"] == 789
+        assert "name" in output_data
         mock_store_manager.store_client.update_known_person_name.assert_called_once_with(
             person_id=789,
             name="Jane Doe",
@@ -1016,26 +1056,33 @@ class TestNewDatabaseCommands:
 
     def test_persons_faces(self, mock_store_manager, sample_face):
         """Test persons faces command."""
+        import json
         mock_store_manager.store_client.get_known_person_faces.return_value = [sample_face]
 
         runner = CliRunner()
         result = runner.invoke(cli, ["persons", "faces", "789"])
 
         assert result.exit_code == 0
-        assert "Faces for Person ID: 789" in result.output
-        assert "Total faces: 1" in result.output
+        # Parse JSON output and verify faces array
+        output_data = json.loads(result.output)
+        assert isinstance(output_data, list)
+        assert len(output_data) == 1
+        assert output_data[0]["id"] == 456
         mock_store_manager.store_client.get_known_person_faces.assert_called_once_with(person_id=789)
 
     def test_images_similar(self, mock_store_manager, sample_similar_images_response):
         """Test images similar command."""
+        import json
         mock_store_manager.store_client.find_similar_images.return_value = sample_similar_images_response
 
         runner = CliRunner()
         result = runner.invoke(cli, ["images", "similar", "123", "--limit", "10", "--threshold", "0.85"])
 
         assert result.exit_code == 0
-        assert "Similar Images for Entity ID: 123" in result.output
-        assert "Found 2 similar images" in result.output
+        # Parse JSON output and verify similar images response
+        output_data = json.loads(result.output)
+        assert "results" in output_data
+        assert len(output_data["results"]) == 2
         mock_store_manager.store_client.find_similar_images.assert_called_once_with(
             entity_id=123,
             limit=10,
