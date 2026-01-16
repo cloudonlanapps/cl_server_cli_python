@@ -35,6 +35,10 @@ class TestAuthErrorsCLI:
         result = cli_runner.invoke(
             cli,
             [
+                "--username",
+                "invalid",
+                "--password",
+                "invalid",
                 "--json",
                 "store",
                 "list",
@@ -83,6 +87,10 @@ class TestAuthErrorsCLI:
         result = cli_runner.invoke(
             cli,
             [
+                "--username",
+                "invalid",
+                "--password",
+                "invalid",
                 "--json",
                 "store",
                 "create",
