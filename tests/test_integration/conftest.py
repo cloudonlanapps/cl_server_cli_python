@@ -582,7 +582,7 @@ def cleanup_test_entities(store_url: str, username: str, password: str, auth_url
 
                     # Fetch entities
                     resp = await client.get(
-                        f"{store_url}/entities?page=1&page_size=1000",
+                        f"{store_url}/entities?page=1&page_size=100",
                         headers={"Authorization": f"Bearer {token}"},
                         timeout=5.0,
                     )
