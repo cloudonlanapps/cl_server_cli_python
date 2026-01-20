@@ -31,6 +31,8 @@ from cl_client.store_client import (
 
 from .conftest import SyncTestHelper, parse_cli_json, parse_cli_json_list, assert_cli_success
 
+pytestmark = [pytest.mark.intelligence, pytest.mark.integration]
+
 
 @pytest.mark.integration
 class TestJobTracking:

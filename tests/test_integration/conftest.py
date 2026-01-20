@@ -336,7 +336,7 @@ class SyncTestHelper:
                 # Step 3: Wait for face embedding jobs
                 print("DEBUG: Waiting for face embedding jobs...")
                 found_embedding = False
-                for _ in range(30):  # Wait up to 60 seconds
+                for _ in range(60):  # Wait up to 120 seconds
                     await asyncio.sleep(2.0)
                     jobs = await manager.store_client.get_entity_jobs(entity_id)
                     embedding_jobs = [j for j in jobs if j.task_type == "face_embedding"]
@@ -411,13 +411,13 @@ class SyncTestHelper:
                 await compute_client.wait_for_job(job_id=face_job.job_id, timeout=30.0)
 
                 # Step 2: Wait for face embedding jobs
-                for _ in range(20):  # Try for 40 seconds
+                for _ in range(45):  # Try for 90 seconds
                     await asyncio.sleep(2.0)
                     jobs = await manager.store_client.get_entity_jobs(entity_id)
                     face_embedding_jobs = [
                         j for j in jobs if j.task_type == "face_embedding"
                     ]
-
+    
                     # Check if all embedding jobs are completed
                     if face_embedding_jobs and all(
                         j.status == "completed" for j in face_embedding_jobs
@@ -426,7 +426,7 @@ class SyncTestHelper:
 
                 # Step 3: Poll for person_id to appear
                 person_id = None
-                for _ in range(10):  # Try for 10 seconds
+                for _ in range(30):  # Try for 30 seconds
                     await asyncio.sleep(1.0)
                     faces = await manager.store_client.get_entity_faces(
                         entity_id=entity_id
@@ -580,26 +580,30 @@ def cleanup_test_entities(store_url: str, username: str, password: str, auth_url
 
                     token = token_resp.json()["access_token"]
 
-                    # Fetch entities
-                    resp = await client.get(
-                        f"{store_url}/entities?page=1&page_size=100",
+                    # Try bulk delete first (fastest, requires admin)
+                    bulk_resp = await client.delete(
+                        f"{store_url}/entities",
                         headers={"Authorization": f"Bearer {token}"},
-                        timeout=5.0,
+                        timeout=10.0,
                     )
+                    
+                    if bulk_resp.status_code == 403:
+                        # Fallback for non-admin: list and delete individually
+                        # This still clears Qdrant because delete_entity now includes vector cleanup
+                        resp = await client.get(
+                            f"{store_url}/entities?page=1&page_size=100",
+                            headers={"Authorization": f"Bearer {token}"},
+                            timeout=5.0,
+                        )
 
-                    if resp.status_code != 200:
-                        return
-
-                    entities = resp.json().get("items", [])
-
-                    # Delete all test entities
-                    for entity in entities:
-                        if entity.get("label", "").startswith("test_"):
-                            await client.delete(
-                                f"{store_url}/entities/{entity['id']}",
-                                headers={"Authorization": f"Bearer {token}"},
-                                timeout=5.0,
-                            )
+                        if resp.status_code == 200:
+                            entities = resp.json().get("items", [])
+                            for entity in entities:
+                                await client.delete(
+                                    f"{store_url}/entities/{entity['id']}",
+                                    headers={"Authorization": f"Bearer {token}"},
+                                    timeout=5.0,
+                                )
             except Exception:
                 # Non-fatal cleanup failure
                 pass

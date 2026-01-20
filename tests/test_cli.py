@@ -1,6 +1,7 @@
 """Unit tests for CLI commands."""
 
 from unittest.mock import AsyncMock
+import pytest
 
 from click.testing import CliRunner
 
@@ -923,6 +924,7 @@ class TestStoreCommands:
         assert "Saved to" in result.output
 
 
+@pytest.mark.intelligence
 class TestNewDatabaseCommands:
     """Test database feature commands (jobs, faces, persons, images)."""
 
