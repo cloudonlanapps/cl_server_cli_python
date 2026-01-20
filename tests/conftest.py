@@ -1,5 +1,6 @@
 """Shared test fixtures for CLI tests."""
 
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,6 +14,17 @@ from cl_client.store_models import (
     EntityVersion,
     StoreConfig,
 )
+
+# ============================================================================
+# TEST ARTIFACT DIRECTORY
+# ============================================================================
+
+TEST_ARTIFACT_DIR = Path(os.getenv("TEST_ARTIFACT_DIR", "/tmp/cl_server_test_artifacts")) / "cli_python"
+TEST_ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+
+# ============================================================================
+# FIXTURES
+# ============================================================================
 
 
 @pytest.fixture
