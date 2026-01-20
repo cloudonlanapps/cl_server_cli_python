@@ -1561,92 +1561,7 @@ def extract(
     asyncio.run(run())
 
 
-# Face Detection Commands
 
-
-@cli.group()
-def face_detection():
-    """Face detection operations."""
-    pass
-
-
-@face_detection.command()
-@click.argument("image", type=click.Path(exists=True, path_type=Path))
-@click.option("--watch", is_flag=True, help="Watch progress in real-time")
-@click.option("--timeout", "-t", default=30.0, help="Timeout in seconds")
-@click.option(
-    "--output",
-    "-o",
-    type=click.Path(path_type=Path),
-    help="Download face detection output to this file",
-)
-@click.pass_context
-def detect(
-    ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]
-):
-    """Detect faces in an image."""
-
-    async def run():
-        client = await get_client(ctx)
-        try:
-            if watch:
-                tracker = JobProgressTracker(
-                    ctx, job_id="pending", description=f"Face detection: {image.name}"
-                )
-                with tracker:
-                    job = await client.face_detection.detect(
-                        image=image,
-                        on_progress=tracker.on_progress,
-                        on_complete=tracker.on_complete,
-                    )
-                    tracker.job_id = job.job_id
-                    final_job = await tracker.wait(timeout=timeout)
-
-                if final_job and final_job.status == "completed":
-                    console.print("[green]✓ Faces detected[/green]")
-                    print_job_result(ctx, final_job)
-
-                    # Download if output specified
-                    if (
-                        output
-                        and final_job.params
-                        and "output_path" in final_job.params
-                    ):
-                        output_path = final_job.params["output_path"]
-                        await client.download_job_file(
-                            final_job.job_id, str(output_path), output
-                        )
-                        console.print(f"[green]✓ Downloaded to {output}[/green]")
-                elif final_job:
-                    output_error(ctx, f"Failed: {final_job.error_message}")
-            else:
-                with console.status("[bold green]Detecting faces..."):
-                    job = await client.face_detection.detect(
-                        image=image,
-                        wait=True,
-                        timeout=timeout,
-                    )
-
-                if job.status == "completed":
-                    console.print("[green]✓ Completed[/green]")
-                    print_job_result(ctx, job)
-
-                    # Download if output specified
-                    if output and job.params and "output_path" in job.params:
-                        output_path = job.params["output_path"]
-                        await client.download_job_file(
-                            job.job_id, str(output_path), output
-                        )
-                        console.print(f"[green]✓ Downloaded to {output}[/green]")
-                else:
-                    output_error(ctx, f"Failed: {job.error_message}")
-        finally:
-            await client.close()
-            session = ctx.obj.get("session")
-            if session:
-                await session.close()
-
-    asyncio.run(run())
 
 
 # Image Conversion Commands
@@ -1850,88 +1765,7 @@ def embed(  # type: ignore[reportRedeclaration]
     asyncio.run(run())
 
 
-# Face Embedding Commands
 
-
-@cli.group()
-def face_embedding():
-    """Face embedding operations."""
-    pass
-
-
-@face_embedding.command()
-@click.argument("image", type=click.Path(exists=True, path_type=Path))
-@click.option("--watch", is_flag=True, help="Watch progress in real-time")
-@click.option("--timeout", "-t", default=60.0, help="Timeout in seconds")
-@click.option(
-    "--output",
-    "-o",
-    type=click.Path(path_type=Path),
-    help="Download output to this file",
-)
-@click.pass_context
-def embed(
-    ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]
-):
-    """Generate face embeddings for an image."""
-
-    async def run():
-        client = await get_client(ctx)
-        try:
-            if watch:
-                tracker = JobProgressTracker(
-                    ctx, job_id="pending", description=f"Face embedding: {image.name}"
-                )
-                with tracker:
-                    job = await client.face_embedding.embed_faces(
-                        image=image,
-                        on_progress=tracker.on_progress,
-                        on_complete=tracker.on_complete,
-                    )
-                    tracker.job_id = job.job_id
-                    final_job = await tracker.wait(timeout=timeout)
-
-                if final_job and final_job.status == "completed":
-                    console.print("[green]✓ Embeddings generated[/green]")
-                    print_job_result(ctx, final_job)
-                    if (
-                        output
-                        and final_job.params
-                        and "output_path" in final_job.params
-                    ):
-                        output_path = final_job.params["output_path"]
-                        await client.download_job_file(
-                            final_job.job_id, str(output_path), output
-                        )
-                        console.print(f"[green]✓ Downloaded to {output}[/green]")
-                elif final_job:
-                    output_error(ctx, f"Failed: {final_job.error_message}")
-            else:
-                with console.status("[bold green]Processing..."):
-                    job = await client.face_embedding.embed_faces(
-                        image=image,
-                        wait=True,
-                        timeout=timeout,
-                    )
-
-                if job.status == "completed":
-                    console.print("[green]✓ Completed[/green]")
-                    print_job_result(ctx, job)
-                    if output and job.params and "output_path" in job.params:
-                        output_path = job.params["output_path"]
-                        await client.download_job_file(
-                            job.job_id, str(output_path), output
-                        )
-                        console.print(f"[green]✓ Downloaded to {output}[/green]")
-                else:
-                    output_error(ctx, f"Failed: {job.error_message}")
-        finally:
-            await client.close()
-            session = ctx.obj.get("session")
-            if session:
-                await session.close()
-
-    asyncio.run(run())
 
 
 # HLS Streaming Commands
@@ -2033,10 +1867,9 @@ def generate_manifest(
 cli.add_command(compute)
 cli.add_command(store)
 cli.add_command(user)
-cli.add_command(face_detection)
 cli.add_command(image_conversion)
 cli.add_command(dino_embedding)
-cli.add_command(face_embedding)
+
 cli.add_command(hls_streaming)
 
 
