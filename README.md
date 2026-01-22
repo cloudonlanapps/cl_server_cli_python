@@ -2,6 +2,14 @@
 
 Command-line interface for the CL Server compute service. Provides a user-friendly terminal interface to submit jobs, monitor progress, and download results.
 
+**Package Manager:** uv
+**Authentication Method:** None (uses cl-client library)
+**Coverage:** 70% minimum
+
+> **For Developers:** See [Integration with Library](#integration-with-library) section for programmatic access and library documentation.
+>
+> **For Testing:** See [tests/README.md](tests/README.md) for comprehensive testing guide, test organization, and coverage requirements.
+
 ## Features
 
 - 🚀 **All 9 Plugins**: CLIP, DINO, EXIF, face detection/embedding, hashing, HLS streaming, image conversion, thumbnails
@@ -22,9 +30,11 @@ Command-line interface for the CL Server compute service. Provides a user-friend
 
 ### Install CLI Tool
 
+**Individual Package Installation:**
+
 ```bash
-# Navigate to example directory
-cd /path/to/cl_server/services/compute/client/python/example
+# Navigate to CLI app directory
+cd apps/cli_python
 
 # Install dependencies (includes cl-client library)
 uv sync
@@ -33,20 +43,9 @@ uv sync
 uv run cl-client --help
 ```
 
-### Alternative: Install from Parent Directory
+**Workspace Installation (All Packages):**
 
-```bash
-# Install library first
-cd /path/to/cl_server/services/compute/client/python
-uv pip install -e .
-
-# Install CLI tool
-cd example
-uv pip install -e .
-
-# Use directly
-cl-client --help
-```
+See root [README.md](../../README.md) for installing all packages using `./install.sh`.
 
 ## Quick Start
 
