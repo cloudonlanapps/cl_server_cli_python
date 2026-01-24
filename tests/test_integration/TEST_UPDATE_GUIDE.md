@@ -300,7 +300,6 @@ from cl_client.models import (
 
     # Face models
     Face,
-    FaceMatch,
 
     # Person models
     KnownPerson,
