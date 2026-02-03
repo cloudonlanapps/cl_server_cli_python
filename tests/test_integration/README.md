@@ -10,7 +10,7 @@ These integration tests verify the CLI database commands (jobs, faces, persons, 
    - Store service (default: http://localhost:8011)
 
 2. **Test Media**:
-   - Test images with faces in `/Users/anandasarangaram/Work/cl_server_test_media/images/`
+   - Test images with faces in `~/cl_server_test_media/images/`
    - Or set `TEST_VECTORS_DIR` environment variable to your test media location
 
 3. **Admin Credentials**:
