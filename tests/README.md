@@ -167,7 +167,7 @@ Integration tests require **test media files** (images with faces):
 - `test_face_single.jpg` — Single face for face detection tests
 - `test_face_multiple.jpg` — Multiple faces for face detection tests
 
-**Location:** `TEST_VECTORS_DIR` environment variable (defaults to `/Users/anandasarangaram/Work/cl_server_test_media`)
+**Location:** `TEST_VECTORS_DIR` environment variable (defaults to `~/cl_server_test_media`)
 
 If media not found, integration tests skip with:
 ```
