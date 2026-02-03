@@ -16,7 +16,7 @@ import pytest
 from click.testing import CliRunner, Result
 from pydantic import BaseModel
 
-from cl_client import SessionManager, ServerConfig
+from cl_client import SessionManager, ServerPref
 
 # Type variable for Pydantic models
 T = TypeVar('T', bound=BaseModel)
@@ -279,7 +279,7 @@ class SyncTestHelper:
         self.store_url = store_url
         self.username = username
         self.password = password
-        self._config = ServerConfig(
+        self._config = ServerPref(
             auth_url=self.auth_url,
             compute_url=self.compute_url,
             store_url=self.store_url,
@@ -379,7 +379,7 @@ class SyncTestHelper:
         """
 
         async def _wait():
-            config = ServerConfig(
+            config = ServerPref(
                 auth_url=self.auth_url,
                 compute_url=self.compute_url,
                 store_url=self.store_url,
@@ -450,7 +450,7 @@ class SyncTestHelper:
         """
 
         async def _wait():
-            config = ServerConfig(
+            config = ServerPref(
                 auth_url=self.auth_url,
                 compute_url=self.compute_url,
                 store_url=self.store_url,
@@ -532,7 +532,7 @@ def cli_env(
 
 # Test media directory
 TEST_MEDIA_DIR = Path(
-    os.getenv("TEST_VECTORS_DIR", "/Users/anandasarangaram/Work/cl_server_test_media")
+    os.getenv("TEST_VECTORS_DIR", str(Path.home() / "cl_server_test_media"))
 )
 
 
