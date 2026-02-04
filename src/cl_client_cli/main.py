@@ -18,7 +18,7 @@ from rich.progress import (
     TaskProgressColumn,
 )
 
-from cl_client import ComputeClient, SessionManager, ServerConfig, StoreManager
+from cl_client import ComputeClient, SessionManager, ServerPref, StoreManager
 from cl_client.models import JobResponse
 
 console = Console()
@@ -311,7 +311,7 @@ def cli(
     ctx.obj["store_url"] = store_url
     ctx.obj["no_auth"] = no_auth
     ctx.obj["output_json"] = output_json
-    ctx.obj["server_config"] = ServerConfig(
+    ctx.obj["server_config"] = ServerPref(
         auth_url=auth_url,
         compute_url=compute_url,
         store_url=store_url,
@@ -333,11 +333,11 @@ async def get_client(ctx: click.Context) -> ComputeClient:
     if no_auth or not (username and password):
         return ComputeClient(
             base_url=server_config.compute_url,
-            server_config=server_config,
+            server_pref=server_config,
         )
 
     # With credentials: create session, login, return client
-    session = SessionManager(server_config=server_config)
+    session = SessionManager(server_pref=server_config)
     try:
         await session.login(username, password)
         # Store session in context for cleanup
@@ -364,7 +364,7 @@ async def get_session_manager(ctx: click.Context) -> SessionManager:
             "Username and password required for this operation. Use --username and --password flags or set CL_USERNAME and CL_PASSWORD env vars",
         )
 
-    session = SessionManager(server_config=server_config)
+    session = SessionManager(server_pref=server_config)
     try:
         await session.login(username, password)
         return session
@@ -389,7 +389,7 @@ async def get_store_manager(ctx: click.Context):
         return StoreManager.guest(base_url=server_config.store_url)
 
     # With credentials: create session, login, return store manager
-    session = SessionManager(server_config=server_config)
+    session = SessionManager(server_pref=server_config)
     try:
         await session.login(username, password)
         # Store session in context for cleanup
@@ -418,7 +418,7 @@ def compute_capabilities(ctx: click.Context):
             output_error(ctx, "Server configuration not found in context.")
             return
 
-        async with ComputeClient(server_config=config) as client:
+        async with ComputeClient(server_pref=config) as client:
             try:
                 response = await client.get_capabilities()
                 output_sdk_result(ctx, response)
