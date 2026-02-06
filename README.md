@@ -25,8 +25,7 @@ Command-line interface for the CL Server compute service. Provides a user-friend
 
 - Python 3.12+
 - `uv` package manager ([installation guide](https://github.com/astral-sh/uv))
-- Running CL Server compute service (http://localhost:8002)
-- MQTT broker (localhost:1883)
+- Running CL Server components (Auth, Compute, Store, MQTT)
 
 ### Install CLI Tool
 
@@ -43,324 +42,96 @@ uv sync
 uv run cl-client --help
 ```
 
-**Workspace Installation (All Packages):**
-
-See root [README.md](../../README.md) for installing all packages using `./install.sh`.
-
 ## Quick Start
+
+The CLI now requires server URLs to be provided either via command-line flags or environment variables.
 
 ### Basic Usage (Polling Mode)
 
 ```bash
 # Submit job and wait for completion
+uv run cl-client \
+  --auth-url http://localhost:8010 \
+  --compute-url http://localhost:8012 \
+  --store-url http://localhost:8011 \
+  --mqtt-url mqtt://localhost:1883 \
+  clip-embedding embed photo.jpg
+```
+
+### Using Environment Variables (Recommended)
+
+```bash
+export CL_AUTH_URL=http://localhost:8010
+export CL_COMPUTE_URL=http://localhost:8012
+export CL_STORE_URL=http://localhost:8011
+export CL_MQTT_URL=mqtt://localhost:1883
+
+# Now you can run commands without flags
 uv run cl-client clip-embedding embed photo.jpg
-```
-
-### Watch Mode (Real-time Progress)
-
-```bash
-# Submit job with live progress tracking via MQTT
-uv run cl-client clip-embedding embed photo.jpg --watch
-```
-
-### Download Results
-
-```bash
-# Automatically download result file
-uv run cl-client clip-embedding embed photo.jpg --output embedding.npy
 ```
 
 ## Available Commands
 
-### 1. CLIP Embedding
+### 1-9. Traditional Plugin Commands
+(CLIP, DINO, EXIF, Face Detection/Embedding, Hash, HLS, Image Conversion, Thumbnails)
 
-Compute CLIP image embeddings (512-dimensional vectors).
+All traditional plugin commands work as before, but with required URL configuration.
 
+### 10. Store Management
+
+#### Get Store Configuration (Admin Only)
 ```bash
-# Basic usage
-uv run cl-client clip-embedding embed photo.jpg
-
-# With watch mode
-uv run cl-client clip-embedding embed photo.jpg --watch
-
-# Download embedding automatically
-uv run cl-client clip-embedding embed photo.jpg --output clip_embed.npy
+uv run cl-client --username admin --password admin store admin config
 ```
 
-**Output**: 512-dimensional embedding saved as `.npy` file
-
-### 2. DINO Embedding
-
-Compute DINO image embeddings (384-dimensional vectors).
-
+#### Get Entity Intelligence
 ```bash
-# Basic usage
-uv run cl-client dino-embedding embed photo.jpg
-
-# With download
-uv run cl-client dino-embedding embed photo.jpg --output dino_embed.npy --watch
+uv run cl-client store intelligence <entity_id>
 ```
 
-**Output**: 384-dimensional embedding saved as `.npy` file
-
-### 3. EXIF Extraction
-
-Extract EXIF metadata from images.
-
+#### Delete Face
 ```bash
-# Extract EXIF data
-uv run cl-client exif extract photo.jpg
-
-# With watch mode
-uv run cl-client exif extract photo.jpg --watch
+uv run cl-client store face delete <face_id>
 ```
 
-**Output**: JSON with camera make, model, GPS coordinates, datetime, orientation, etc.
-
-### 4. Face Detection
-
-Detect faces in images with bounding boxes.
-
+#### Audit Report (Admin Only)
+Generate a report of orphaned resources (files, faces, vectors, MQTT messages).
 ```bash
-# Detect faces
-uv run cl-client face-detection detect photo.jpg
-
-# With custom confidence threshold
-uv run cl-client face-detection detect photo.jpg --confidence-threshold 0.8
-
-# Download detection results
-uv run cl-client face-detection detect photo.jpg --output detections.json --watch
+uv run cl-client --username admin --password admin store admin audit-report
 ```
 
-**Output**: JSON with face bounding boxes, confidence scores, and count
-
-**Parameters**:
-- `--confidence-threshold`: Minimum confidence score (0.0-1.0, default: 0.7)
-
-### 5. Face Embedding
-
-Compute face embeddings for detected faces.
-
+#### Clear Orphans (Admin Only)
+Clear orphaned resources with confirmation.
 ```bash
-# Embed faces
-uv run cl-client face-embedding embed photo.jpg
-
-# With custom threshold
-uv run cl-client face-embedding embed photo.jpg --confidence-threshold 0.75
-
-# Download embeddings
-uv run cl-client face-embedding embed photo.jpg --output face_embeddings.npy --watch
-```
-
-**Output**: 128-dimensional embeddings for each detected face
-
-**Parameters**:
-- `--confidence-threshold`: Face detection threshold (0.0-1.0, default: 0.7)
-
-### 6. Perceptual Hashing
-
-Compute perceptual hashes for image similarity detection.
-
-```bash
-# Compute hashes
-uv run cl-client hash compute photo.jpg
-
-# With watch mode
-uv run cl-client hash compute photo.jpg --watch
-```
-
-**Output**: JSON with `phash` and `dhash` values
-
-### 7. HLS Streaming
-
-Generate HLS manifests for video streaming.
-
-```bash
-# Generate HLS manifest
-uv run cl-client hls-streaming generate-manifest video.mp4
-
-# With custom segment duration
-uv run cl-client hls-streaming generate-manifest video.mp4 --segment-duration 6
-
-# With watch mode
-uv run cl-client hls-streaming generate-manifest video.mp4 --watch
-```
-
-**Output**: HLS manifest URL for adaptive streaming
-
-**Parameters**:
-- `--segment-duration`: HLS segment duration in seconds (default: 4)
-
-### 8. Image Conversion
-
-Convert images between formats (JPG, PNG, WebP).
-
-```bash
-# Convert PNG to JPG
-uv run cl-client image-conversion convert input.png --output-format jpg
-
-# With custom quality
-uv run cl-client image-conversion convert input.png --output-format jpg --quality 95
-
-# With custom dimensions
-uv run cl-client image-conversion convert input.jpg \
-  --output-format webp \
-  --width 1920 \
-  --height 1080 \
-  --quality 90
-
-# Download converted image
-uv run cl-client image-conversion convert input.png \
-  --output-format jpg \
-  --output converted.jpg \
-  --watch
-```
-
-**Parameters**:
-- `--output-format`: Target format (jpg, png, webp) **[required]**
-- `--quality`: Output quality 1-100 (default: 85)
-- `--width`: Target width in pixels (optional, maintains aspect ratio if height not specified)
-- `--height`: Target height in pixels (optional, maintains aspect ratio if width not specified)
-
-### 9. Media Thumbnail
-
-Generate thumbnails from images or videos.
-
-```bash
-# Generate thumbnail from image
-uv run cl-client media-thumbnail generate photo.jpg --width 256 --height 256
-
-# Generate thumbnail from video (first frame)
-uv run cl-client media-thumbnail generate video.mp4 --width 512 --height 288
-
-# Download thumbnail
-uv run cl-client media-thumbnail generate video.mp4 \
-  --width 256 \
-  --height 256 \
-  --output thumbnail.jpg \
-  --watch
-```
-
-**Parameters**:
-- `--width, -w`: Thumbnail width in pixels **[required]**
-- `--height, -h`: Thumbnail height in pixels **[required]**
-
-### Download Command
-
-Download files from completed jobs.
-
-```bash
-# Download specific file from job
-uv run cl-client download <job-id> output/clip_embedding.npy embedding.npy
-
-# Download to current directory
-uv run cl-client download <job-id> output/thumbnail.jpg .
-```
-
-**Arguments**:
-1. `job-id`: UUID of completed job
-2. `file-path`: Relative path of file in job output (e.g., `output/result.npy`)
-3. `destination`: Local file path to save to (optional, defaults to filename)
-
-## Command Options
-
-### Global Options
-
-All commands support these global options:
-
-- `--timeout SECONDS`: Maximum wait time for job completion (default: 30.0)
-- `--watch, -w`: Enable real-time MQTT progress tracking
-- `--output, -o FILE`: Automatically download result to specified file
-- `--help`: Show command help
-
-### Examples with Options
-
-```bash
-# Custom timeout
-uv run cl-client clip-embedding embed photo.jpg --timeout 60
-
-# Watch mode with download
-uv run cl-client clip-embedding embed photo.jpg --watch --output result.npy
-
-# Combine all options
-uv run cl-client media-thumbnail generate video.mp4 \
-  --width 256 \
-  --height 256 \
-  --watch \
-  --timeout 45 \
-  --output thumb.jpg
-```
-
-## Workflow Examples
-
-### Complete Image Analysis
-
-```bash
-# 1. Extract EXIF metadata
-uv run cl-client exif extract photo.jpg
-
-# 2. Generate thumbnail
-uv run cl-client media-thumbnail generate photo.jpg -w 256 -h 256 --output thumb.jpg
-
-# 3. Compute CLIP embedding
-uv run cl-client clip-embedding embed photo.jpg --output clip.npy
-
-# 4. Compute perceptual hash
-uv run cl-client hash compute photo.jpg
-
-# 5. Detect faces
-uv run cl-client face-detection detect photo.jpg
-```
-
-### Video Processing Pipeline
-
-```bash
-# 1. Generate thumbnail from video
-uv run cl-client media-thumbnail generate video.mp4 -w 512 -h 288 --output preview.jpg
-
-# 2. Generate HLS manifest
-uv run cl-client hls-streaming generate-manifest video.mp4 --watch
-
-# 3. Embed video thumbnail
-uv run cl-client clip-embedding embed preview.jpg --output video_embed.npy
-```
-
-### Batch Image Processing
-
-```bash
-# Process multiple images with watch mode
-for img in *.jpg; do
-  uv run cl-client clip-embedding embed "$img" \
-    --output "embeddings/${img%.jpg}.npy" \
-    --watch
-done
+uv run cl-client --username admin --password admin store admin clear-orphans
 ```
 
 ## Configuration
 
 ### Environment Variables
 
-Configure server connection and MQTT broker:
+| Variable | Description |
+|----------|-------------|
+| `CL_AUTH_URL` | Auth service URL (e.g., http://localhost:8010) |
+| `CL_COMPUTE_URL` | Compute service URL (e.g., http://localhost:8012) |
+| `CL_STORE_URL` | Store service URL (e.g., http://localhost:8011) |
+| `CL_MQTT_URL` | MQTT broker URL (e.g., mqtt://localhost:1883) |
+| `CL_USERNAME` | Default username for authentication |
+| `CL_PASSWORD` | Default password for authentication |
 
-```bash
-# Server connection
-export COMPUTE_SERVER_URL="http://localhost:8002"
+### Global Options
 
-# MQTT broker
-export MQTT_BROKER_HOST="localhost"
-export MQTT_BROKER_PORT="1883"
-
-# Test media location (for tests)
-export CL_CLIENT_TEST_MEDIA="/path/to/test_media"
-```
-
-### Default Configuration
-
-If environment variables are not set, the CLI uses these defaults:
-
-- **Server**: `http://localhost:8002`
-- **MQTT Broker**: `localhost:1883`
-- **Timeout**: 30 seconds
+- `--auth-url`: Auth service URL
+- `--compute-url`: Compute service URL
+- `--store-url`: Store service URL
+- `--mqtt-url`: MQTT broker URL
+- `--username`: Username for authenticated commands
+- `--password`: Password for authenticated commands
+- `--no-auth`: Disable authentication (if supported by server)
+- `--json`: Output results in JSON format
+- `--timeout SECONDS`: Maximum wait time for job completion (default: 30.0)
+- `--watch, -w`: Enable real-time MQTT progress tracking
+- `--output, -o FILE`: Automatically download result to specified file
 
 ## Output Formats
 

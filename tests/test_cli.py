@@ -2,25 +2,34 @@
 
 from unittest.mock import AsyncMock
 import pytest
+import json
 
 from click.testing import CliRunner
 
 from cl_client.models import JobResponse
-from cl_client.store_models import Entity, EntityListResponse, StoreConfig, StoreOperationResult
+from cl_client.store_models import (
+    Entity,
+    EntityListResponse,
+    StorePref,
+    StoreOperationResult,
+    AuditReport,
+    CleanupReport,
+)
+from cl_client.intelligence_models import EntityIntelligenceData
 from cl_client_cli.main import cli
 
 
 class TestClipEmbedding:
     """Tests for clip-embedding commands."""
 
-    def test_embed_polling_mode(self, mock_compute_client, temp_image_file, completed_job):
+    def test_embed_polling_mode(self, mock_compute_client, temp_image_file, completed_job, mandatory_args):
         """Test clip-embedding embed in polling mode."""
         # Configure mock
         mock_compute_client.clip_embedding.embed_image = AsyncMock(return_value=completed_job)
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, ["clip-embedding", "embed", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["clip-embedding", "embed", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -28,7 +37,7 @@ class TestClipEmbedding:
         assert "completed" in result.output.lower()
         mock_compute_client.clip_embedding.embed_image.assert_called_once()
 
-    def test_embed_watch_mode(self, mock_compute_client, temp_image_file, completed_job):
+    def test_embed_watch_mode(self, mock_compute_client, temp_image_file, completed_job, mandatory_args):
         """Test clip-embedding embed with --watch flag."""
         # Configure mock to simulate immediate completion via callback
         async def mock_embed_image(**kwargs):
@@ -41,16 +50,16 @@ class TestClipEmbedding:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, ["clip-embedding", "embed", "--watch", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["clip-embedding", "embed", "--watch", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
         mock_compute_client.clip_embedding.embed_image.assert_called_once()
 
-    def test_embed_missing_file(self, mock_compute_client):
+    def test_embed_missing_file(self, mock_compute_client, mandatory_args):
         """Test clip-embedding embed with missing file."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["clip-embedding", "embed", "/nonexistent/file.jpg"])
+        result = runner.invoke(cli, mandatory_args + ["clip-embedding", "embed", "/nonexistent/file.jpg"])
 
         # Should fail validation before calling API
         assert result.exit_code != 0
@@ -59,7 +68,7 @@ class TestClipEmbedding:
 class TestDinoEmbedding:
     """Tests for dino-embedding commands."""
 
-    def test_embed_polling_mode(self, mock_compute_client, temp_image_file, completed_job):
+    def test_embed_polling_mode(self, mock_compute_client, temp_image_file, completed_job, mandatory_args):
         """Test dino-embedding embed in polling mode."""
         # Configure mock
         job = JobResponse(
@@ -69,15 +78,16 @@ class TestDinoEmbedding:
             progress=100,
             params={},
             task_output={"embedding": [0.1] * 384},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.dino_embedding.embed_image = AsyncMock(return_value=job)
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, ["dino-embedding", "embed", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["dino-embedding", "embed", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -88,7 +98,7 @@ class TestDinoEmbedding:
 class TestExif:
     """Tests for exif commands."""
 
-    def test_extract_polling_mode(self, mock_compute_client, temp_image_file):
+    def test_extract_polling_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test exif extract in polling mode."""
         # Configure mock
         job = JobResponse(
@@ -102,15 +112,16 @@ class TestExif:
                 "model": "EOS 5D Mark IV",
                 "datetime": "2024:01:15 10:30:00",
             },
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.exif.extract = AsyncMock(return_value=job)
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, ["exif", "extract", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["exif", "extract", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -119,13 +130,10 @@ class TestExif:
         mock_compute_client.exif.extract.assert_called_once()
 
 
-
-
-
 class TestHash:
     """Tests for hash commands."""
 
-    def test_compute_polling_mode(self, mock_compute_client, temp_image_file):
+    def test_compute_polling_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test hash compute in polling mode."""
         # Configure mock
         job = JobResponse(
@@ -138,15 +146,16 @@ class TestHash:
                 "phash": "abcdef1234567890",
                 "dhash": "fedcba0987654321",
             },
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.hash.compute = AsyncMock(return_value=job)
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, ["hash", "compute", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["hash", "compute", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -158,7 +167,7 @@ class TestHash:
 class TestHlsStreaming:
     """Tests for hls-streaming commands."""
 
-    def test_generate_manifest_polling_mode(self, mock_compute_client, temp_video_file):
+    def test_generate_manifest_polling_mode(self, mock_compute_client, temp_video_file, mandatory_args):
         """Test hls-streaming generate-manifest in polling mode."""
         # Configure mock
         job = JobResponse(
@@ -171,15 +180,16 @@ class TestHlsStreaming:
                 "manifest_url": "/output/manifest.m3u8",
                 "segments": 10,
             },
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.hls_streaming.generate_manifest = AsyncMock(return_value=job)
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, ["hls-streaming", "generate-manifest", str(temp_video_file)])
+        result = runner.invoke(cli, mandatory_args + ["hls-streaming", "generate-manifest", str(temp_video_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -190,7 +200,7 @@ class TestHlsStreaming:
 class TestImageConversion:
     """Tests for image-conversion commands."""
 
-    def test_convert_polling_mode(self, mock_compute_client, temp_image_file):
+    def test_convert_polling_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test image-conversion convert in polling mode."""
         # Configure mock
         job = JobResponse(
@@ -200,16 +210,17 @@ class TestImageConversion:
             progress=100,
             params={},
             task_output={"output_path": "/output/image.png"},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.image_conversion.convert = AsyncMock(return_value=job)
 
         # Run command
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["image-conversion", "convert", str(temp_image_file), "--format", "png"]
+            cli, mandatory_args + ["image-conversion", "convert", str(temp_image_file), "--format", "png"]
         )
 
         # Verify
@@ -217,7 +228,7 @@ class TestImageConversion:
         assert "test-job-mno" in result.output
         mock_compute_client.image_conversion.convert.assert_called_once()
 
-    def test_convert_with_quality(self, mock_compute_client, temp_image_file):
+    def test_convert_with_quality(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test image-conversion convert with quality parameter."""
         # Configure mock
         job = JobResponse(
@@ -227,9 +238,10 @@ class TestImageConversion:
             progress=100,
             params={},
             task_output={"output_path": "/output/image.jpg"},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.image_conversion.convert = AsyncMock(return_value=job)
 
@@ -237,7 +249,7 @@ class TestImageConversion:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            [
+            mandatory_args + [
                 "image-conversion",
                 "convert",
                 str(temp_image_file),
@@ -258,7 +270,7 @@ class TestImageConversion:
 class TestMediaThumbnail:
     """Tests for media-thumbnail commands."""
 
-    def test_generate_polling_mode(self, mock_compute_client, temp_image_file):
+    def test_generate_polling_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test media-thumbnail generate in polling mode."""
         # Configure mock
         job = JobResponse(
@@ -268,9 +280,10 @@ class TestMediaThumbnail:
             progress=100,
             params={},
             task_output={"thumbnail_path": "/output/thumb.jpg"},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.media_thumbnail.generate = AsyncMock(return_value=job)
 
@@ -278,7 +291,7 @@ class TestMediaThumbnail:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["media-thumbnail", "generate", str(temp_image_file), "--width", "256", "--height", "256"],
+            mandatory_args + ["media-thumbnail", "generate", str(temp_image_file), "--width", "256", "--height", "256"],
         )
 
         # Verify
@@ -286,7 +299,7 @@ class TestMediaThumbnail:
         assert "test-job-stu" in result.output
         mock_compute_client.media_thumbnail.generate.assert_called_once()
 
-    def test_generate_with_size(self, mock_compute_client, temp_image_file):
+    def test_generate_with_size(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test media-thumbnail generate with size parameters."""
         # Configure mock
         job = JobResponse(
@@ -296,9 +309,10 @@ class TestMediaThumbnail:
             progress=100,
             params={},
             task_output={"thumbnail_path": "/output/thumb.jpg"},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.media_thumbnail.generate = AsyncMock(return_value=job)
 
@@ -306,7 +320,7 @@ class TestMediaThumbnail:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            [
+            mandatory_args + [
                 "media-thumbnail",
                 "generate",
                 str(temp_image_file),
@@ -328,7 +342,7 @@ class TestMediaThumbnail:
 class TestErrorHandling:
     """Tests for error handling."""
 
-    def test_failed_job(self, mock_compute_client, temp_image_file):
+    def test_failed_job(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test handling of failed jobs."""
         # Configure mock to return failed job
         failed_job = JobResponse(
@@ -337,28 +351,29 @@ class TestErrorHandling:
             status="failed",
             progress=50,
             params={},
+            task_output=None,
             error_message="Processing error",
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
         mock_compute_client.clip_embedding.embed_image = AsyncMock(return_value=failed_job)
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, ["clip-embedding", "embed", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["clip-embedding", "embed", str(temp_image_file)])
 
         # Should show error but may exit 0 (depends on implementation)
         assert "failed" in result.output.lower() or "error" in result.output.lower()
 
-    def test_timeout_parameter(self, mock_compute_client, temp_image_file, completed_job):
+    def test_timeout_parameter(self, mock_compute_client, temp_image_file, completed_job, mandatory_args):
         """Test timeout parameter is passed correctly."""
         mock_compute_client.clip_embedding.embed_image = AsyncMock(return_value=completed_job)
 
         # Run command with custom timeout
         runner = CliRunner()
         result = runner.invoke(
-            cli, ["clip-embedding", "embed", "--timeout", "120", str(temp_image_file)]
+            cli, mandatory_args + ["clip-embedding", "embed", "--timeout", "120", str(temp_image_file)]
         )
 
         # Verify timeout was passed
@@ -370,7 +385,7 @@ class TestErrorHandling:
 class TestAdditionalCommands:
     """Additional tests for better coverage."""
 
-    def test_dino_watch_mode(self, mock_compute_client, temp_image_file):
+    def test_dino_watch_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test dino-embedding with watch mode."""
         job = JobResponse(
             job_id="test-job-watch",
@@ -379,9 +394,10 @@ class TestAdditionalCommands:
             progress=100,
             params={},
             task_output={"embedding": [0.1] * 384},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
 
         async def mock_embed(**kwargs):
@@ -392,12 +408,12 @@ class TestAdditionalCommands:
         mock_compute_client.dino_embedding.embed_image = AsyncMock(side_effect=mock_embed)
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["dino-embedding", "embed", "--watch", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["dino-embedding", "embed", "--watch", str(temp_image_file)])
 
         assert result.exit_code == 0
         mock_compute_client.dino_embedding.embed_image.assert_called_once()
 
-    def test_exif_watch_mode(self, mock_compute_client, temp_image_file):
+    def test_exif_watch_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test exif extract with watch mode."""
         job = JobResponse(
             job_id="test-job-exif-watch",
@@ -406,9 +422,10 @@ class TestAdditionalCommands:
             progress=100,
             params={},
             task_output={"make": "Canon", "model": "EOS 5D"},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
 
         async def mock_extract(**kwargs):
@@ -419,12 +436,12 @@ class TestAdditionalCommands:
         mock_compute_client.exif.extract = AsyncMock(side_effect=mock_extract)
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["exif", "extract", "--watch", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["exif", "extract", "--watch", str(temp_image_file)])
 
         assert result.exit_code == 0
         mock_compute_client.exif.extract.assert_called_once()
 
-    def test_hash_watch_mode(self, mock_compute_client, temp_image_file):
+    def test_hash_watch_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test hash compute with watch mode."""
         job = JobResponse(
             job_id="test-job-hash-watch",
@@ -433,9 +450,10 @@ class TestAdditionalCommands:
             progress=100,
             params={},
             task_output={"phash": "abc123", "dhash": "def456"},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
 
         async def mock_compute(**kwargs):
@@ -446,14 +464,12 @@ class TestAdditionalCommands:
         mock_compute_client.hash.compute = AsyncMock(side_effect=mock_compute)
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["hash", "compute", "--watch", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["hash", "compute", "--watch", str(temp_image_file)])
 
         assert result.exit_code == 0
         mock_compute_client.hash.compute.assert_called_once()
 
-
-
-    def test_image_conversion_watch_mode(self, mock_compute_client, temp_image_file):
+    def test_image_conversion_watch_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test image-conversion convert with watch mode."""
         job = JobResponse(
             job_id="test-job-convert-watch",
@@ -462,9 +478,10 @@ class TestAdditionalCommands:
             progress=100,
             params={},
             task_output={"output_path": "/output/image.png"},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
 
         async def mock_convert(**kwargs):
@@ -477,13 +494,13 @@ class TestAdditionalCommands:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["image-conversion", "convert", "--watch", str(temp_image_file), "--format", "png"],
+            mandatory_args + ["image-conversion", "convert", "--watch", str(temp_image_file), "--format", "png"],
         )
 
         assert result.exit_code == 0
         mock_compute_client.image_conversion.convert.assert_called_once()
 
-    def test_media_thumbnail_watch_mode(self, mock_compute_client, temp_image_file):
+    def test_media_thumbnail_watch_mode(self, mock_compute_client, temp_image_file, mandatory_args):
         """Test media-thumbnail generate with watch mode."""
         job = JobResponse(
             job_id="test-job-thumb-watch",
@@ -492,9 +509,10 @@ class TestAdditionalCommands:
             progress=100,
             params={},
             task_output={"thumbnail_path": "/output/thumb.jpg"},
+            error_message=None,
             priority=5,
             created_at=1234567890000,
-            completed_at=1234567891000,
+            updated_at=1234567890000,
         )
 
         async def mock_generate(**kwargs):
@@ -507,7 +525,7 @@ class TestAdditionalCommands:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            [
+            mandatory_args + [
                 "media-thumbnail",
                 "generate",
                 "--watch",
@@ -526,7 +544,7 @@ class TestAdditionalCommands:
 class TestStoreCommands:
     """Tests for store commands."""
 
-    def test_store_list_success(self, mock_store_manager, sample_entity_list):
+    def test_store_list_success(self, mock_store_manager, sample_entity_list, mandatory_args):
         """Test store list command."""
         # Configure mock to return success result
         mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
@@ -536,7 +554,7 @@ class TestStoreCommands:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "list"])
+        result = runner.invoke(cli, mandatory_args + ["store", "list"])
 
         # Verify
         assert result.exit_code == 0
@@ -544,7 +562,7 @@ class TestStoreCommands:
         assert "Entity 2" in result.output
         mock_store_manager.list_entities.assert_called_once()
 
-    def test_store_list_with_pagination(self, mock_store_manager, sample_entity_list):
+    def test_store_list_with_pagination(self, mock_store_manager, sample_entity_list, mandatory_args):
         """Test store list with pagination options."""
         mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
             success="Success",
@@ -552,7 +570,7 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "list", "--page", "2", "--page-size", "10"])
+        result = runner.invoke(cli, mandatory_args + ["store", "list", "--page", "2", "--page-size", "10"])
 
         assert result.exit_code == 0
         # Verify pagination parameters were passed
@@ -560,7 +578,7 @@ class TestStoreCommands:
         assert call_kwargs["page"] == 2
         assert call_kwargs["page_size"] == 10
 
-    def test_store_list_with_search(self, mock_store_manager, sample_entity_list):
+    def test_store_list_with_search(self, mock_store_manager, sample_entity_list, mandatory_args):
         """Test store list with search query."""
         mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
             success="Success",
@@ -568,25 +586,25 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "list", "--search", "test query"])
+        result = runner.invoke(cli, mandatory_args + ["store", "list", "--search", "test query"])
 
         assert result.exit_code == 0
         call_kwargs = mock_store_manager.list_entities.call_args[1]
         assert call_kwargs["search_query"] == "test query"
 
-    def test_store_list_error(self, mock_store_manager):
+    def test_store_list_error(self, mock_store_manager, mandatory_args):
         """Test store list with error."""
         mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
             error="Unauthorized: Invalid token",
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "list"])
+        result = runner.invoke(cli, mandatory_args + ["store", "list"])
 
         assert result.exit_code != 0
         assert "Unauthorized" in result.output
 
-    def test_store_get_success(self, mock_store_manager, sample_entity):
+    def test_store_get_success(self, mock_store_manager, sample_entity, mandatory_args):
         """Test store get command."""
         mock_store_manager.read_entity.return_value = StoreOperationResult[Entity](
             success="Entity retrieved successfully",
@@ -594,14 +612,14 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "get", "1"])
+        result = runner.invoke(cli, mandatory_args + ["store", "get", "1"])
 
         assert result.exit_code == 0
         assert "Test Entity" in result.output
         assert "Test description" in result.output
         mock_store_manager.read_entity.assert_called_once_with(entity_id=1, version=None)
 
-    def test_store_get_with_version(self, mock_store_manager, sample_entity):
+    def test_store_get_with_version(self, mock_store_manager, sample_entity, mandatory_args):
         """Test store get with specific version."""
         mock_store_manager.read_entity.return_value = StoreOperationResult[Entity](
             success="Success",
@@ -609,15 +627,14 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "get", "1", "--version", "2"])
+        result = runner.invoke(cli, mandatory_args + ["store", "get", "1", "--version", "2"])
 
         assert result.exit_code == 0
         call_kwargs = mock_store_manager.read_entity.call_args[1]
         assert call_kwargs["version"] == 2
 
-    def test_store_create_collection(self, mock_store_manager, sample_collection):
+    def test_store_create_collection(self, mock_store_manager, sample_collection, mandatory_args):
         """Test creating a collection."""
-        import json
         mock_store_manager.create_entity.return_value = StoreOperationResult[Entity](
             success="Entity created successfully",
             data=sample_collection,
@@ -626,7 +643,7 @@ class TestStoreCommands:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["store", "create", "--label", "Test Collection", "--collection"],
+            mandatory_args + ["store", "create", "--label", "Test Collection", "--collection"],
         )
 
         assert result.exit_code == 0
@@ -639,9 +656,8 @@ class TestStoreCommands:
         assert call_kwargs["label"] == "Test Collection"
         assert call_kwargs["is_collection"] is True
 
-    def test_store_create_with_file(self, mock_store_manager, sample_entity, temp_image_file):
+    def test_store_create_with_file(self, mock_store_manager, sample_entity, temp_image_file, mandatory_args):
         """Test creating entity with file upload."""
-        import json
         mock_store_manager.create_entity.return_value = StoreOperationResult[Entity](
             success="Entity created successfully",
             data=sample_entity,
@@ -650,7 +666,7 @@ class TestStoreCommands:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            [
+            mandatory_args + [
                 "store",
                 "create",
                 "--label",
@@ -672,7 +688,7 @@ class TestStoreCommands:
         assert call_kwargs["description"] == "Test photo"
         assert call_kwargs["image_path"] is not None
 
-    def test_store_update_success(self, mock_store_manager, sample_entity):
+    def test_store_update_success(self, mock_store_manager, sample_entity, mandatory_args):
         """Test store update command."""
         mock_store_manager.update_entity.return_value = StoreOperationResult[Entity](
             success="Entity updated successfully",
@@ -682,7 +698,7 @@ class TestStoreCommands:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["store", "update", "1", "--label", "Updated Label"],
+            mandatory_args + ["store", "update", "1", "--label", "Updated Label"],
         )
 
         assert result.exit_code == 0
@@ -691,7 +707,7 @@ class TestStoreCommands:
         assert call_kwargs["entity_id"] == 1
         assert call_kwargs["label"] == "Updated Label"
 
-    def test_store_patch_label(self, mock_store_manager, sample_entity):
+    def test_store_patch_label(self, mock_store_manager, sample_entity, mandatory_args):
         """Test store patch command for label."""
         mock_store_manager.patch_entity.return_value = StoreOperationResult[Entity](
             success="Entity patched successfully",
@@ -701,7 +717,7 @@ class TestStoreCommands:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["store", "patch", "1", "--label", "Patched Label"],
+            mandatory_args + ["store", "patch", "1", "--label", "Patched Label"],
         )
 
         assert result.exit_code == 0
@@ -709,7 +725,7 @@ class TestStoreCommands:
         assert call_kwargs["entity_id"] == 1
         assert call_kwargs["label"] == "Patched Label"
 
-    def test_store_patch_soft_delete(self, mock_store_manager, sample_entity):
+    def test_store_patch_soft_delete(self, mock_store_manager, sample_entity, mandatory_args):
         """Test store patch for soft delete."""
         deleted_entity = Entity(id=1, label="Test", is_deleted=True)
         mock_store_manager.patch_entity.return_value = StoreOperationResult[Entity](
@@ -718,14 +734,14 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "patch", "1", "--delete"])
+        result = runner.invoke(cli, mandatory_args + ["store", "patch", "1", "--delete"])
 
         assert result.exit_code == 0
         assert "Deleted entity" in result.output
         call_kwargs = mock_store_manager.patch_entity.call_args[1]
         assert call_kwargs["is_deleted"] is True
 
-    def test_store_patch_restore(self, mock_store_manager, sample_entity):
+    def test_store_patch_restore(self, mock_store_manager, sample_entity, mandatory_args):
         """Test store patch for restore."""
         mock_store_manager.patch_entity.return_value = StoreOperationResult[Entity](
             success="Entity patched successfully",
@@ -733,14 +749,14 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "patch", "1", "--restore"])
+        result = runner.invoke(cli, mandatory_args + ["store", "patch", "1", "--restore"])
 
         assert result.exit_code == 0
         assert "Restored entity" in result.output
         call_kwargs = mock_store_manager.patch_entity.call_args[1]
         assert call_kwargs["is_deleted"] is False
 
-    def test_store_delete_success(self, mock_store_manager):
+    def test_store_delete_success(self, mock_store_manager, mandatory_args):
         """Test store delete command."""
         mock_store_manager.delete_entity.return_value = StoreOperationResult[None](
             success="Entity deleted successfully",
@@ -749,13 +765,13 @@ class TestStoreCommands:
 
         runner = CliRunner()
         # Use --yes flag to bypass confirmation
-        result = runner.invoke(cli, ["store", "delete", "1", "--yes"])
+        result = runner.invoke(cli, mandatory_args + ["store", "delete", "1", "--yes"])
 
         assert result.exit_code == 0
         assert "Deleted entity" in result.output
         mock_store_manager.delete_entity.assert_called_once_with(entity_id=1)
 
-    def test_store_versions_success(self, mock_store_manager, sample_versions):
+    def test_store_versions_success(self, mock_store_manager, sample_versions, mandatory_args):
         """Test store versions command."""
         mock_store_manager.get_versions.return_value = StoreOperationResult[list](
             success="Version history retrieved successfully",
@@ -763,79 +779,129 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "versions", "1"])
+        result = runner.invoke(cli, mandatory_args + ["store", "versions", "1"])
 
         assert result.exit_code == 0
         assert "Version 1" in result.output
         assert "Version 2" in result.output
         mock_store_manager.get_versions.assert_called_once_with(entity_id=1)
 
-    def test_store_admin_config(self, mock_store_manager, sample_store_config):
+    def test_store_admin_config(self, mock_store_manager, sample_store_pref, mandatory_args):
         """Test store admin config command."""
-        import json
-        mock_store_manager.get_config.return_value = StoreOperationResult(
+        mock_store_manager.get_pref.return_value = StoreOperationResult(
             success="Configuration retrieved successfully",
-            data=sample_store_config,
+            data=sample_store_pref,
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "admin", "config"])
+        result = runner.invoke(cli, mandatory_args + ["store", "admin", "config"])
 
         assert result.exit_code == 0
         # Parse JSON output and verify config data
         output_data = json.loads(result.output)
         assert output_data["guest_mode"] is False
         assert "updated_at" in output_data
-        mock_store_manager.get_config.assert_called_once()
+        mock_store_manager.get_pref.assert_called_once()
 
-    def test_store_admin_set_guest_mode(self, mock_store_manager, sample_store_config):
+    def test_store_admin_set_guest_mode(self, mock_store_manager, sample_store_pref, mandatory_args):
         """Test store admin set-guest-mode command."""
-        updated_config = StoreConfig(
-            guest_mode=False,
-            updated_at=1704153600000,
-            updated_by="admin",
-        )
         mock_store_manager.update_guest_mode.return_value = StoreOperationResult(
-            success="Guest mode configuration updated successfully",
-            data=updated_config,
+            success="Configuration updated successfully",
+            data=sample_store_pref,
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "admin", "set-guest-mode", "false"])
+        result = runner.invoke(cli, mandatory_args + ["store", "admin", "set-guest-mode", "false"])
 
+        # Verify config was updated
         assert result.exit_code == 0
         assert "disabled" in result.output
         mock_store_manager.update_guest_mode.assert_called_once_with(guest_mode=False)
 
-    def test_store_list_with_output_file(self, mock_store_manager, sample_entity_list, tmp_path):
-        """Test store list with JSON output file."""
-        output_file = tmp_path / "entities.json"
-        mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
-            success="Success",
-            data=sample_entity_list,
+
+    def test_store_face_delete_success(self, mock_store_manager, mandatory_args):
+        """Test store face delete command."""
+        mock_store_manager.delete_face.return_value = StoreOperationResult(
+            success="Face deleted successfully",
+            data=None,
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "list", "--output", str(output_file)])
+        result = runner.invoke(cli, mandatory_args + ["store", "face", "delete", "1", "--yes"])
 
         assert result.exit_code == 0
-        assert output_file.exists()
-        assert "Saved to" in result.output
+        assert "success" in result.output
+        mock_store_manager.delete_face.assert_called_once_with(1)
 
-    def test_store_get_with_output_file(self, mock_store_manager, sample_entity, tmp_path):
-        """Test store get with JSON output file."""
-        output_file = tmp_path / "entity.json"
-        mock_store_manager.read_entity.return_value = StoreOperationResult[Entity](
-            success="Success",
-            data=sample_entity,
+    def test_store_intelligence_success(self, mock_store_manager, sample_entity_intelligence: EntityIntelligenceData, mandatory_args):
+        """Test store intelligence command."""
+        mock_store_manager.get_entity_intelligence.return_value = StoreOperationResult(
+            success="Intelligence data retrieved successfully",
+            data=sample_entity_intelligence,
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["store", "get", "1", "--output", str(output_file)])
+        result = runner.invoke(cli, mandatory_args + ["store", "intelligence", "1"])
 
         assert result.exit_code == 0
-        assert output_file.exists()
-        assert "Saved to" in result.output
+        data = json.loads(result.output)
+        assert data["overall_status"] == "completed"
+        mock_store_manager.get_entity_intelligence.assert_called_once_with(1)
+
+    def test_store_admin_audit_report(self, mock_store_manager, sample_audit_report, mandatory_args):
+        """Test store admin audit-report command."""
+        mock_store_manager.get_audit_report.return_value = StoreOperationResult(
+            success="Audit report retrieved successfully",
+            data=sample_audit_report,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, mandatory_args + ["store", "admin", "audit-report"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "orphaned_files" in data
+        mock_store_manager.get_audit_report.assert_called_once()
+
+    def test_store_admin_clear_orphans(self, mock_store_manager, sample_cleanup_report, mandatory_args):
+        """Test store admin clear-orphans command."""
+        mock_store_manager.clear_orphans.return_value = StoreOperationResult(
+            success="Orphans cleared successfully",
+            data=sample_cleanup_report,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, mandatory_args + ["store", "admin", "clear-orphans", "--yes"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "files_deleted" in data
+        mock_store_manager.clear_orphans.assert_called_once()
 
 
+class TestAuthErrors:
+    """Tests for authentication error scenarios."""
 
+    def test_unauthorized_error(self, mock_store_manager, mandatory_args):
+        """Test handling of 401 Unauthorized errors."""
+        mock_store_manager.list_entities.return_value = StoreOperationResult(
+            error="Unauthorized: Invalid token",
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, mandatory_args + ["store", "list"])
+
+        assert result.exit_code != 0
+        assert "Unauthorized" in result.output
+
+    def test_forbidden_error(self, mock_store_manager, mandatory_args):
+        """Test handling of 403 Forbidden errors."""
+        mock_store_manager.get_pref.return_value = StoreOperationResult(
+            error="Forbidden: Admin access required",
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(cli, mandatory_args + ["store", "admin", "config"])
+
+        assert result.exit_code != 0
+        assert "Forbidden" in result.output

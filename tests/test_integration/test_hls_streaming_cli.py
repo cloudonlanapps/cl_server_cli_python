@@ -10,14 +10,12 @@ Run with:
 """
 
 from pathlib import Path
-
 import pytest
 from click.testing import CliRunner
 
 from cl_client_cli.main import cli
 from cl_client.models import JobResponse
-
-from .conftest import parse_cli_json, assert_cli_error
+from tests.conftest import parse_cli_json, assert_cli_error
 
 
 @pytest.mark.integration
@@ -29,12 +27,14 @@ class TestHlsStreamingCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
         test_image: Path,
+        mandatory_args: list[str],
     ):
         """Test hls-streaming generate with HTTP polling and JSON output."""
         # Execute CLI command with JSON output (uses wait=True by default)
         result = cli_runner.invoke(
             cli,
-            [
+            mandatory_args
+            + [
                 "--json",
                 "hls-streaming",
                 "generate-manifest",
@@ -53,12 +53,14 @@ class TestHlsStreamingCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
         test_image: Path,
+        mandatory_args: list[str],
     ):
         """Test hls-streaming generate with MQTT callbacks (--watch flag) and JSON output."""
         # Execute CLI command with --watch for MQTT updates and JSON output
         result = cli_runner.invoke(
             cli,
-            [
+            mandatory_args
+            + [
                 "--json",
                 "hls-streaming",
                 "generate-manifest",
@@ -79,6 +81,7 @@ class TestHlsStreamingCLI:
         cli_env: dict[str, str],
         test_image: Path,
         tmp_path: Path,
+        mandatory_args: list[str],
     ):
         """Test hls-streaming generate with output file download and JSON output."""
         output_file = tmp_path / "manifest.m3u8"
@@ -86,7 +89,8 @@ class TestHlsStreamingCLI:
         # Execute CLI command with -o flag to download manifest and JSON output
         result = cli_runner.invoke(
             cli,
-            [
+            mandatory_args
+            + [
                 "--json",
                 "hls-streaming",
                 "generate-manifest",
@@ -109,12 +113,14 @@ class TestHlsStreamingCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
+        mandatory_args: list[str],
     ):
         """Test hls-streaming generate with missing file returns JSON error."""
         # Execute CLI command with non-existent file and JSON output
         result = cli_runner.invoke(
             cli,
-            [
+            mandatory_args
+            + [
                 "--json",
                 "hls-streaming",
                 "generate-manifest",

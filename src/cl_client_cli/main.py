@@ -18,8 +18,15 @@ from rich.progress import (
     TaskProgressColumn,
 )
 
-from cl_client import ComputeClient, SessionManager, ServerPref, StoreManager
+from cl_client import (
+    ComputeClient,
+    ServerPref,
+    SessionManager,
+    StoreManager,
+)
+from cl_client.intelligence_models import EntityIntelligenceData
 from cl_client.models import JobResponse
+from cl_client.store_models import AuditReport, CleanupReport, StorePref
 
 console = Console()
 
@@ -238,20 +245,26 @@ def print_job_result(ctx: click.Context, job: JobResponse) -> None:
 @click.option(
     "--auth-url",
     envvar="CL_AUTH_URL",
-    default="http://localhost:8000",
-    help="Auth service URL",
+    required=True,
+    help="Auth service URL (required)",
 )
 @click.option(
     "--compute-url",
     envvar="CL_COMPUTE_URL",
-    default="http://localhost:8002",
-    help="Compute service URL",
+    required=True,
+    help="Compute service URL (required)",
 )
 @click.option(
     "--store-url",
     envvar="CL_STORE_URL",
-    default="http://localhost:8001",
-    help="Store service URL",
+    required=True,
+    help="Store service URL (required)",
+)
+@click.option(
+    "--mqtt-url",
+    envvar="CL_MQTT_URL",
+    required=True,
+    help="MQTT broker URL (required, e.g., mqtt://mqtt.example.com:1883)",
 )
 @click.option(
     "--no-auth",
@@ -274,28 +287,35 @@ def cli(
     auth_url: str,
     compute_url: str,
     store_url: str,
+    mqtt_url: str,
     no_auth: bool,
     output_json: bool,
 ):
     """CL Client CLI - Command-line interface for compute, store, and auth operations.
 
     Examples:
-      # No-auth mode (default if no credentials provided)
-      cl-client clip-embedding embed image.jpg --watch
+      # No-auth mode (credentials not required)
+      cl-client --auth-url http://auth.example.com:8000 \
+        --compute-url http://compute.example.com:8002 \
+        --store-url http://store.example.com:8001 \
+        --mqtt-url mqtt://mqtt.example.com:1883 \
+        --no-auth \
+        clip-embedding embed image.jpg --watch
 
       # With authentication
-      cl-client --username user --password pass clip-embedding embed image.jpg
+      cl-client --username user --password pass \
+        --auth-url http://auth.example.com:8000 \
+        --compute-url http://compute.example.com:8002 \
+        --store-url http://store.example.com:8001 \
+        --mqtt-url mqtt://mqtt.example.com:1883 \
+        clip-embedding embed image.jpg
 
-      # Store operations
-      cl-client store list --page 1 --page-size 20
-      cl-client --username user --password pass store create --label "My Photo" --file photo.jpg
-
-      # Using environment variables
-      export CL_USERNAME=user CL_PASSWORD=pass
-      cl-client media-thumbnail generate video.mp4 -w 256 -h 256
-
-      # Explicit no-auth mode
-      cl-client --no-auth hash compute image.jpg
+      # Using environment variables (recommended)
+      export CL_AUTH_URL=http://auth.example.com:8000
+      export CL_COMPUTE_URL=http://compute.example.com:8002
+      export CL_STORE_URL=http://store.example.com:8001
+      export CL_MQTT_URL=mqtt://mqtt.example.com:1883
+      cl-client clip-embedding embed image.jpg
     """
     # Suppress Rich console output in JSON mode to ensure clean JSON stdout
     if output_json:
@@ -309,12 +329,14 @@ def cli(
     ctx.obj["auth_url"] = auth_url
     ctx.obj["compute_url"] = compute_url
     ctx.obj["store_url"] = store_url
+    ctx.obj["mqtt_url"] = mqtt_url
     ctx.obj["no_auth"] = no_auth
     ctx.obj["output_json"] = output_json
     ctx.obj["server_config"] = ServerPref(
         auth_url=auth_url,
         compute_url=compute_url,
         store_url=store_url,
+        mqtt_url=mqtt_url,
     )
 
 
@@ -1114,7 +1136,7 @@ def get_config(ctx: click.Context):
         manager = await get_store_manager(ctx)
         await manager.__aenter__()
         try:
-            result = await manager.get_config()
+            result = await manager.get_pref()
 
             if result.is_error or result.data is None:
                 output_error(
@@ -1859,11 +1881,150 @@ def generate_manifest(
     asyncio.run(run())
 
 
-# Face Database Commands
+@store.group("face")
+def face():
+    """Manage faces in the store."""
+    pass
 
 
+@face.command("delete")
+@click.argument("face_id", type=int)
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def delete_face(ctx: click.Context, face_id: int, yes: bool):
+    """Delete a face from the database."""
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            if not yes:
+                click.confirm(
+                    f"Are you sure you want to delete face ID: {face_id}?",
+                    abort=True,
+                )
+
+            result = await manager.delete_face(face_id)
+            output_sdk_result(ctx, result)
+        except click.Abort:
+            output_error(ctx, "Deletion cancelled")
+        except Exception as e:
+            output_error(ctx, str(e))
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
 
 
+@store.command("intelligence")
+@click.argument("entity_id", type=int)
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Save output to file")
+@click.pass_context
+def get_intelligence(ctx: click.Context, entity_id: int, output: Optional[Path]):
+    """Get intelligence data for an entity."""
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            result = await manager.get_entity_intelligence(entity_id)
+
+            if result.is_error or result.data is None:
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No intelligence data found"
+                )
+
+            output_sdk_result(ctx, result.data)
+
+            if output:
+                with open(output, "w") as f:
+                    f.write(result.data.model_dump_json(indent=2))
+                if not should_use_json(ctx):
+                    click.echo(f"Saved to {output}", err=True)
+        except Exception as e:
+            output_error(ctx, str(e))
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store_admin.command("audit-report")
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Save report to file")
+@click.pass_context
+def audit_report(ctx: click.Context, output: Optional[Path]):
+    """Generate audit report of orphaned resources (admin only)."""
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            result = await manager.get_audit_report()
+            
+            if result.is_error or result.data is None:
+                output_error(
+                    ctx, str(result.error) if result.is_error else "Failed to generate audit report"
+                )
+
+            output_sdk_result(ctx, result.data)
+
+            if output:
+                with open(output, "w") as f:
+                    f.write(result.data.model_dump_json(indent=2))
+                if not should_use_json(ctx):
+                    click.echo(f"Saved to {output}", err=True)
+        except Exception as e:
+            output_error(ctx, str(e))
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@store_admin.command("clear-orphans")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def clear_orphans(ctx: click.Context, yes: bool):
+    """Remove all orphaned resources (admin only)."""
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            if not yes:
+                click.confirm(
+                    "Are you sure you want to clear ALL orphaned resources? This action cannot be undone.",
+                    abort=True,
+                )
+
+            result = await manager.clear_orphans()
+            
+            if result.is_error or result.data is None:
+                output_error(
+                    ctx, str(result.error) if result.is_error else "Failed to clear orphans"
+                )
+
+            output_sdk_result(ctx, result.data)
+        except click.Abort:
+            output_error(ctx, "Cleanup cancelled")
+        except Exception as e:
+            output_error(ctx, str(e))
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
 cli.add_command(compute)
 cli.add_command(store)
 cli.add_command(user)
