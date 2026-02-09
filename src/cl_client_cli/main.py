@@ -1,13 +1,19 @@
 """CL Client CLI - Main command-line interface."""
 
 import asyncio
+import base64
+import configparser
+import hashlib
 import json
 import os
 import sys
+import time
+import uuid
 from pathlib import Path
 from typing import NoReturn, Optional
 
 import click
+from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel
 from rich.console import Console
 from rich.progress import (
@@ -32,6 +38,37 @@ console = Console()
 
 
 # ============================================================================
+# Permissions Configuration
+# ============================================================================
+
+# Allowed permissions list - placeholder, update as needed
+ALLOWED_PERMISSIONS = [
+    "read:jobs",
+    "write:jobs",
+    "delete:jobs",
+    "read:entities",
+    "write:entities",
+    "delete:entities",
+    "admin:users",
+    "admin:config",
+    "admin:system",
+]
+
+
+def validate_permissions(permissions: tuple[str, ...]) -> tuple[bool, list[str]]:
+    """Validate permissions against allowed list.
+
+    Args:
+        permissions: Tuple of permission strings to validate
+
+    Returns:
+        Tuple of (is_valid, list_of_invalid_permissions)
+    """
+    invalid = [p for p in permissions if p not in ALLOWED_PERMISSIONS]
+    return (len(invalid) == 0, invalid)
+
+
+# ============================================================================
 # CLI Response Models (minimal - rest use SDK models)
 # ============================================================================
 
@@ -48,6 +85,177 @@ class SuccessResponse(BaseModel):
 
     status: str = "success"
     message: Optional[str] = None
+
+
+# ============================================================================
+# Configuration File Support
+# ============================================================================
+
+
+def load_config_file() -> dict[str, Optional[str]]:
+    """Load configuration from ~/.cl_client_config.ini file.
+
+    Config file format:
+    [cl_client]
+    auth_url = http://localhost:8010
+    compute_url = http://localhost:8012
+    store_url = http://localhost:8011
+    mqtt_url = mqtt://localhost:1883
+    username = admin
+    # Note: password NOT stored in config for security
+
+    Returns:
+        Dictionary with config values (None if not set)
+    """
+    config_path = Path.home() / ".cl_client_config.ini"
+    config = {
+        "auth_url": None,
+        "compute_url": None,
+        "store_url": None,
+        "mqtt_url": None,
+        "username": None,
+    }
+
+    if config_path.exists():
+        parser = configparser.ConfigParser()
+        try:
+            parser.read(config_path)
+            if "cl_client" in parser:
+                section = parser["cl_client"]
+                for key in config.keys():
+                    if key in section:
+                        config[key] = section[key]
+        except Exception as e:
+            click.echo(f"Warning: Failed to read config file: {e}", err=True)
+
+    return config
+
+
+# ============================================================================
+# Password Caching (Encrypted, 6-hour expiration)
+# ============================================================================
+
+
+def _get_encryption_key(username: str) -> bytes:
+    """Generate encryption key from username and machine UUID.
+
+    Uses a deterministic approach so the same key is generated across sessions.
+    The key is derived from:
+    1. Username (consistent for the user)
+    2. Machine UUID (consistent for the machine)
+
+    This provides reasonable security while avoiding storing the key in plaintext.
+    """
+    try:
+        # Get machine UUID (consistent across sessions on the same machine)
+        machine_id = str(uuid.getnode())
+    except Exception:
+        # Fallback if UUID not available
+        machine_id = "default-machine"
+
+    # Combine username and machine ID to create a unique key
+    key_material = f"{username}:{machine_id}".encode()
+
+    # Use SHA256 to derive a 32-byte key, then base64 encode for Fernet
+    key_hash = hashlib.sha256(key_material).digest()
+    return base64.urlsafe_b64encode(key_hash)
+
+
+def save_password_to_cache(username: str, password: str) -> None:
+    """Save encrypted password to cache file with timestamp.
+
+    Args:
+        username: Username for authentication
+        password: Password to encrypt and cache
+    """
+    cache_path = Path.home() / ".cl_client_cache"
+
+    try:
+        # Generate encryption key
+        key = _get_encryption_key(username)
+        cipher = Fernet(key)
+
+        # Encrypt password
+        encrypted_password = cipher.encrypt(password.encode()).decode()
+
+        # Create cache data with timestamp
+        cache_data = {
+            "username": username,
+            "encrypted_password": encrypted_password,
+            "timestamp": time.time(),  # Unix timestamp
+        }
+
+        # Write to cache file
+        with open(cache_path, "w") as f:
+            json.dump(cache_data, f)
+
+        # Set restrictive permissions (owner read/write only)
+        cache_path.chmod(0o600)
+
+    except Exception:
+        # Silently fail - caching is optional
+        pass
+
+
+def load_password_from_cache(username: str) -> Optional[str]:
+    """Load and decrypt password from cache if not expired.
+
+    Args:
+        username: Username to load cached password for
+
+    Returns:
+        Decrypted password if cache valid and not expired, None otherwise
+    """
+    cache_path = Path.home() / ".cl_client_cache"
+
+    if not cache_path.exists():
+        return None
+
+    try:
+        # Read cache file
+        with open(cache_path) as f:
+            cache_data = json.load(f)
+
+        # Verify username matches
+        cached_username = cache_data.get("username")
+        if cached_username != username:
+            return None
+
+        # Check expiration (6 hours = 21600 seconds)
+        timestamp = cache_data.get("timestamp", 0)
+        current_time = time.time()
+        age_hours = (current_time - timestamp) / 3600
+
+        if age_hours > 6:
+            # Cache expired
+            clear_password_cache()
+            return None
+
+        # Decrypt password
+        encrypted_password = cache_data.get("encrypted_password")
+        if not encrypted_password:
+            return None
+
+        key = _get_encryption_key(username)
+        cipher = Fernet(key)
+        password = cipher.decrypt(encrypted_password.encode()).decode()
+
+        return password
+
+    except (json.JSONDecodeError, InvalidToken, KeyError, Exception):
+        # Cache corrupted or decryption failed - clear it
+        clear_password_cache()
+        return None
+
+
+def clear_password_cache() -> None:
+    """Clear the password cache file."""
+    cache_path = Path.home() / ".cl_client_cache"
+    if cache_path.exists():
+        try:
+            cache_path.unlink()
+        except Exception:
+            pass  # Silently fail
 
 
 # ============================================================================
@@ -245,26 +453,22 @@ def print_job_result(ctx: click.Context, job: JobResponse) -> None:
 @click.option(
     "--auth-url",
     envvar="CL_AUTH_URL",
-    required=True,
-    help="Auth service URL (required)",
+    help="Auth service URL (can be set in config file)",
 )
 @click.option(
     "--compute-url",
     envvar="CL_COMPUTE_URL",
-    required=True,
-    help="Compute service URL (required)",
+    help="Compute service URL (can be set in config file)",
 )
 @click.option(
     "--store-url",
     envvar="CL_STORE_URL",
-    required=True,
-    help="Store service URL (required)",
+    help="Store service URL (can be set in config file)",
 )
 @click.option(
     "--mqtt-url",
     envvar="CL_MQTT_URL",
-    required=True,
-    help="MQTT broker URL (required, e.g., mqtt://mqtt.example.com:1883)",
+    help="MQTT broker URL (can be set in config file, e.g., mqtt://mqtt.example.com:1883)",
 )
 @click.option(
     "--no-auth",
@@ -284,43 +488,60 @@ def cli(
     ctx: click.Context,
     username: Optional[str],
     password: Optional[str],
-    auth_url: str,
-    compute_url: str,
-    store_url: str,
-    mqtt_url: str,
+    auth_url: Optional[str],
+    compute_url: Optional[str],
+    store_url: Optional[str],
+    mqtt_url: Optional[str],
     no_auth: bool,
     output_json: bool,
 ):
     """CL Client CLI - Command-line interface for compute, store, and auth operations.
 
+    Configuration priority (highest to lowest):
+      1. Command-line options
+      2. Environment variables
+      3. Config file (~/.cl_client_config.ini)
+
     Examples:
-      # No-auth mode (credentials not required)
-      cl-client --auth-url http://auth.example.com:8000 \
-        --compute-url http://compute.example.com:8002 \
-        --store-url http://store.example.com:8001 \
-        --mqtt-url mqtt://mqtt.example.com:1883 \
-        --no-auth \
-        clip-embedding embed image.jpg --watch
+      # Using config file (recommended - create ~/.cl_client_config.ini)
+      cl-client admin user list
 
-      # With authentication
-      cl-client --username user --password pass \
-        --auth-url http://auth.example.com:8000 \
-        --compute-url http://compute.example.com:8002 \
-        --store-url http://store.example.com:8001 \
-        --mqtt-url mqtt://mqtt.example.com:1883 \
-        clip-embedding embed image.jpg
-
-      # Using environment variables (recommended)
+      # Using environment variables
       export CL_AUTH_URL=http://auth.example.com:8000
       export CL_COMPUTE_URL=http://compute.example.com:8002
       export CL_STORE_URL=http://store.example.com:8001
       export CL_MQTT_URL=mqtt://mqtt.example.com:1883
-      cl-client clip-embedding embed image.jpg
+      cl-client store list
+
+      # Using CLI flags
+      cl-client --auth-url http://localhost:8010 \
+        --compute-url http://localhost:8012 \
+        --store-url http://localhost:8011 \
+        --mqtt-url mqtt://localhost:1883 \
+        store list
     """
     # Suppress Rich console output in JSON mode to ensure clean JSON stdout
     if output_json:
         global console
         console = Console(file=open(os.devnull, "w"))
+
+    # Load config file
+    config = load_config_file()
+
+    # Priority: CLI flags > env vars > config file
+    auth_url = auth_url or config.get("auth_url")
+    compute_url = compute_url or config.get("compute_url")
+    store_url = store_url or config.get("store_url")
+    mqtt_url = mqtt_url or config.get("mqtt_url")
+    username = username or config.get("username")
+
+    # Try to load cached password if username provided but no password
+    if username and not password and not no_auth:
+        cached_password = load_password_from_cache(username)
+        if cached_password:
+            password = cached_password
+            if not output_json:
+                click.echo("Using cached password", err=True)
 
     # Store config in context for commands to access
     ctx.ensure_object(dict)
@@ -332,12 +553,17 @@ def cli(
     ctx.obj["mqtt_url"] = mqtt_url
     ctx.obj["no_auth"] = no_auth
     ctx.obj["output_json"] = output_json
-    ctx.obj["server_config"] = ServerPref(
-        auth_url=auth_url,
-        compute_url=compute_url,
-        store_url=store_url,
-        mqtt_url=mqtt_url,
-    )
+
+    # Only create ServerPref if we have all URLs
+    if auth_url and compute_url and store_url and mqtt_url:
+        ctx.obj["server_config"] = ServerPref(
+            auth_url=auth_url,
+            compute_url=compute_url,
+            store_url=store_url,
+            mqtt_url=mqtt_url,
+        )
+    else:
+        ctx.obj["server_config"] = None
 
 
 async def get_client(ctx: click.Context) -> ComputeClient:
@@ -350,9 +576,29 @@ async def get_client(ctx: click.Context) -> ComputeClient:
     password = ctx.obj.get("password")
     no_auth = ctx.obj.get("no_auth", False)
     server_config = ctx.obj.get("server_config")
+    output_json = ctx.obj.get("output_json", False)
 
-    # If no credentials or --no-auth flag, use no-auth mode
-    if no_auth or not (username and password):
+    # If --no-auth flag explicitly set, use no-auth mode
+    if no_auth:
+        return ComputeClient(
+            base_url=server_config.compute_url,
+            server_pref=server_config,
+        )
+
+    # If username provided but no password, prompt for it
+    if username and not password:
+        if output_json:
+            # In JSON mode, fall back to no-auth silently
+            return ComputeClient(
+                base_url=server_config.compute_url,
+                server_pref=server_config,
+            )
+        else:
+            # Prompt for password interactively
+            password = click.prompt("Password", hide_input=True, type=str)
+
+    # If no credentials at all, use no-auth mode
+    if not (username and password):
         return ComputeClient(
             base_url=server_config.compute_url,
             server_pref=server_config,
@@ -362,11 +608,17 @@ async def get_client(ctx: click.Context) -> ComputeClient:
     session = SessionManager(server_pref=server_config)
     try:
         await session.login(username, password)
+        # Cache password after successful authentication
+        if username and password:
+            save_password_to_cache(username, password)
         # Store session in context for cleanup
         ctx.obj["session"] = session
         return session.create_compute_client()
     except Exception as e:
         await session.close()
+        # Clear cache on auth failure
+        if username:
+            clear_password_cache()
         output_error(ctx, f"Authentication failed: {e}")
 
 
@@ -379,19 +631,38 @@ async def get_session_manager(ctx: click.Context) -> SessionManager:
     username = ctx.obj.get("username")
     password = ctx.obj.get("password")
     server_config = ctx.obj.get("server_config")
+    output_json = ctx.obj.get("output_json", False)
 
-    if not username or not password:
+    # Check if username is provided
+    if not username:
         output_error(
             ctx,
-            "Username and password required for this operation. Use --username and --password flags or set CL_USERNAME and CL_PASSWORD env vars",
+            "Username required. Provide via --username flag or set in config file (~/.cl_client_config.ini)",
         )
+
+    # If password not provided, prompt for it interactively
+    if not password:
+        if output_json:
+            output_error(
+                ctx,
+                "Password required in JSON mode. Use --password flag or set CL_PASSWORD env var",
+            )
+        else:
+            # Prompt for password interactively
+            password = click.prompt("Password", hide_input=True, type=str)
 
     session = SessionManager(server_pref=server_config)
     try:
         await session.login(username, password)
+        # Cache password after successful authentication
+        if username and password:
+            save_password_to_cache(username, password)
         return session
     except Exception as e:
         await session.close()
+        # Clear cache on auth failure
+        if username:
+            clear_password_cache()
         output_error(ctx, f"Authentication failed: {e}")
 
 
@@ -405,99 +676,149 @@ async def get_store_manager(ctx: click.Context):
     password = ctx.obj.get("password")
     no_auth = ctx.obj.get("no_auth", False)
     server_config = ctx.obj.get("server_config")
+    output_json = ctx.obj.get("output_json", False)
 
-    # If no credentials or --no-auth flag, use guest mode
-    if no_auth or not (username and password):
+    # If --no-auth flag explicitly set, use guest mode
+    if no_auth:
+        return StoreManager.guest(base_url=server_config.store_url)
+
+    # If username provided but no password, prompt for it
+    if username and not password:
+        if output_json:
+            # In JSON mode, fall back to guest mode silently
+            return StoreManager.guest(base_url=server_config.store_url)
+        else:
+            # Prompt for password interactively
+            password = click.prompt("Password", hide_input=True, type=str)
+
+    # If no credentials at all, use guest mode
+    if not (username and password):
         return StoreManager.guest(base_url=server_config.store_url)
 
     # With credentials: create session, login, return store manager
     session = SessionManager(server_pref=server_config)
     try:
         await session.login(username, password)
+        # Cache password after successful authentication
+        if username and password:
+            save_password_to_cache(username, password)
         # Store session in context for cleanup
         ctx.obj["session"] = session
         return session.create_store_manager()
     except Exception as e:
         await session.close()
+        # Clear cache on auth failure
+        if username:
+            clear_password_cache()
         output_error(ctx, f"Authentication failed: {e}")
 
 
-@click.group()
-@click.pass_context
-def compute(ctx: click.Context):
-    """Manage and monitor compute service."""
+# Clear Cache Command
+
+
+@cli.command("clear-cache")
+def clear_cache():
+    """Clear cached password (removes ~/.cl_client_cache)."""
+    clear_password_cache()
+    click.echo("✓ Password cache cleared")
+
+
+# Admin Commands
+
+
+@cli.group("admin")
+def admin():
+    """Administration commands (user management)."""
     pass
 
 
-@compute.command("capabilities")
+@admin.command("login")
+@click.option("--username", "-u", help="Username (uses config if not provided)")
+@click.option("--password", "-p", help="Password (prompts if not provided)")
 @click.pass_context
-def compute_capabilities(ctx: click.Context):
-    """Show current worker capabilities and availability."""
+def admin_login(ctx: click.Context, username: Optional[str], password: Optional[str]):
+    """Login and cache credentials for subsequent commands.
 
-    async def run():
-        config = ctx.obj.get("server_config")
-        if not config:
-            output_error(ctx, "Server configuration not found in context.")
-            return
-
-        async with ComputeClient(server_pref=config) as client:
-            try:
-                response = await client.get_capabilities()
-                output_sdk_result(ctx, response)
-            except Exception as e:
-                output_error(ctx, str(e))
-
-    asyncio.run(run())
-
-
-@click.argument("job_id", type=str)
-@click.argument("file_path", type=str)
-@click.argument("destination", type=click.Path(path_type=Path), required=False)
-@click.pass_context
-def download(
-    ctx: click.Context, job_id: str, file_path: str, destination: Optional[Path]
-):
-    """Download output file from a completed job.
-
-    Args:
-        job_id: Job ID (UUID)
-        file_path: Relative path to file (e.g., "output/embedding.npy")
-        destination: Local path to save file (optional, defaults to filename)
+    Username and password are optional - they can be taken from:
+    - CLI flags (highest priority)
+    - Config file (~/.cl_client_config.ini)
+    - Interactive prompt (for password only)
 
     Examples:
-        cl-client download abc123 output/clip_embedding.npy embedding.npy
-        cl-client download abc123 output/thumbnail.jpg ./result.jpg
+        cl-client admin login --username admin --password mypass
+        cl-client admin login -u admin -p mypass
+        cl-client admin login  # Uses username from config, prompts for password
+        cl-client admin login -u admin  # Prompts for password
     """
+    # Get username from context if not provided
+    if not username:
+        username = ctx.obj.get("username")
+        if not username:
+            output_error(
+                ctx,
+                "Username required. Provide via --username flag or set in config file.",
+            )
+
+    # Get password from context or prompt
+    if not password:
+        # Check if password already cached
+        cached_password = load_password_from_cache(username)
+        if cached_password:
+            password = cached_password
+            if not should_use_json(ctx):
+                click.echo("Using cached password", err=True)
+        else:
+            # Prompt for password interactively
+            password = click.prompt("Password", hide_input=True, type=str)
 
     async def run():
-        # Default destination to just the filename
-        dest_path = destination if destination else Path(Path(file_path).name)
+        # Get server config from context
+        server_config = ctx.obj.get("server_config")
+        if not server_config:
+            output_error(
+                ctx,
+                "Server configuration required. Set URLs via config file, environment variables, or CLI flags.",
+            )
 
-        client = await get_client(ctx)
+        # Create session and attempt login
+        session = SessionManager(server_pref=server_config)
         try:
-            with console.status(f"[bold green]Downloading {file_path}..."):
-                await client.download_job_file(job_id, file_path, dest_path)
+            await session.login(username, password)
+            # Cache password after successful authentication
+            save_password_to_cache(username, password)
 
-            console.print(f"[green]✓ Downloaded to {dest_path}[/green]")
-            console.print(f"  Job ID: {job_id}")
-            console.print(f"  File: {file_path}")
-            console.print(f"  Size: {dest_path.stat().st_size} bytes")
+            # Output success
+            success = SuccessResponse(
+                message=f"Successfully logged in as '{username}'. Password cached for 6 hours."
+            )
+            output_sdk_result(ctx, success)
+        except Exception as e:
+            # Clear cache on auth failure
+            clear_password_cache()
+            output_error(ctx, f"Login failed: {e}")
         finally:
-            await client.close()
-            # Close session if exists
-            session = ctx.obj.get("session")
-            if session:
-                await session.close()
+            await session.close()
 
     asyncio.run(run())
 
 
-# User Management Commands
+@admin.command("logout")
+@click.pass_context
+def admin_logout(ctx: click.Context):
+    """Logout and clear cached credentials.
+
+    Examples:
+        cl-client admin logout
+    """
+    clear_password_cache()
+
+    success = SuccessResponse(message="Logged out successfully. Password cache cleared.")
+    output_sdk_result(ctx, success)
 
 
-@cli.group()
+@admin.group("user")
 def user():
-    """User management operations (admin only)."""
+    """User management commands (admin only)."""
     pass
 
 
@@ -522,11 +843,20 @@ def user_create(
     """Create a new user (admin only).
 
     Examples:
-        cl-client --username admin --password admin user create newuser pass123
-        cl-client user create john doe123 --admin
-        cl-client user create jane doe456 -p read:jobs -p write:jobs
+        cl-client --username admin --password admin admin user create newuser pass123
+        cl-client admin user create john doe123 --admin
+        cl-client admin user create jane doe456 -p read:jobs -p write:jobs
     """
     from cl_client import UserCreateRequest
+
+    # Validate permissions
+    if permissions:
+        is_valid, invalid_perms = validate_permissions(permissions)
+        if not is_valid:
+            output_error(
+                ctx,
+                f"Invalid permissions: {', '.join(invalid_perms)}. Use 'cl-client admin permissions list' to see allowed permissions.",
+            )
 
     async def run():
         session = await get_session_manager(ctx)
@@ -641,12 +971,21 @@ def user_update(
     """Update user (admin only).
 
     Examples:
-        cl-client user update 2 --password newpass123
-        cl-client user update 2 --admin
-        cl-client user update 2 --inactive
-        cl-client user update 2 -p read:jobs -p write:jobs -p admin
+        cl-client admin user update 2 --password newpass123
+        cl-client admin user update 2 --admin
+        cl-client admin user update 2 --inactive
+        cl-client admin user update 2 -p read:jobs -p write:jobs
     """
     from cl_client import UserUpdateRequest
+
+    # Validate permissions
+    if permissions:
+        is_valid, invalid_perms = validate_permissions(permissions)
+        if not is_valid:
+            output_error(
+                ctx,
+                f"Invalid permissions: {', '.join(invalid_perms)}. Use 'cl-client admin permissions list' to see allowed permissions.",
+            )
 
     async def run():
         session = await get_session_manager(ctx)
@@ -722,6 +1061,361 @@ def user_delete(ctx: click.Context, user_id: int, yes: bool):
     asyncio.run(run())
 
 
+@admin.group("permissions")
+def permissions_group():
+    """Permissions management commands."""
+    pass
+
+
+@permissions_group.command("list")
+@click.pass_context
+def permissions_list(ctx: click.Context):
+    """List all allowed permissions.
+
+    Examples:
+        cl-client admin permissions list
+        cl-client admin permissions list --json
+    """
+    # Create a simple model for permissions list
+    class PermissionsList(BaseModel):
+        permissions: list[str]
+        count: int
+
+    permissions_data = PermissionsList(
+        permissions=ALLOWED_PERMISSIONS,
+        count=len(ALLOWED_PERMISSIONS),
+    )
+
+    output_sdk_result(ctx, permissions_data)
+
+
+@admin.group("store")
+def admin_store():
+    """Store admin operations."""
+    pass
+
+
+@admin_store.command("config")
+@click.pass_context
+def store_get_config(ctx: click.Context):
+    """Get store configuration (admin only).
+
+    Examples:
+        cl-client admin store config
+    """
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            result = await manager.get_pref()
+
+            if result.is_error or result.data is None:
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
+
+            # Output SDK Config model directly
+            output_sdk_result(ctx, result.data)
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@admin_store.command("get-guest-mode")
+@click.pass_context
+def store_get_guest_mode(ctx: click.Context):
+    """Get store guest mode configuration (admin only).
+
+    Examples:
+        cl-client admin store get-guest-mode
+    """
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            result = await manager.get_pref()
+
+            if result.is_error or result.data is None:
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
+
+            # Create simple response with just guest_mode
+            class GuestModeResponse(BaseModel):
+                guest_mode: bool
+                service: str = "store"
+
+            guest_mode_data = GuestModeResponse(guest_mode=result.data.guest_mode)
+            output_sdk_result(ctx, guest_mode_data)
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@admin_store.command("set-guest-mode")
+@click.argument("enabled", type=bool)
+@click.pass_context
+def store_set_guest_mode(ctx: click.Context, enabled: bool):
+    """Enable or disable guest mode for store (admin only).
+
+    Guest mode allows unauthenticated access to the store service.
+
+    Examples:
+        cl-client admin store set-guest-mode true
+        cl-client admin store set-guest-mode false
+    """
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            result = await manager.update_guest_mode(guest_mode=enabled)
+
+            if result.is_error:
+                output_error(ctx, str(result.error))
+
+            # Output success response for void operation
+            success = SuccessResponse(
+                message=f"Store guest mode {'enabled' if enabled else 'disabled'}"
+            )
+            output_sdk_result(ctx, success)
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@admin_store.command("audit-report")
+@click.pass_context
+def store_audit_report(ctx: click.Context):
+    """Generate audit report of orphaned resources (admin only).
+
+    Reports orphaned files, faces, vectors, and MQTT messages.
+
+    Examples:
+        cl-client admin store audit-report
+        cl-client admin store audit-report --json
+    """
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            result = await manager.get_audit_report()
+
+            if result.is_error or result.data is None:
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
+
+            # Output SDK AuditReport model directly
+            output_sdk_result(ctx, result.data)
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@admin_store.command("clear-orphans")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+@click.pass_context
+def store_clear_orphans(ctx: click.Context, yes: bool):
+    """Clear orphaned resources (admin only).
+
+    Removes orphaned files, faces, vectors, and MQTT messages.
+
+    Examples:
+        cl-client admin store clear-orphans
+        cl-client admin store clear-orphans --yes  # Skip confirmation
+    """
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            # Get audit report first for confirmation
+            if not yes:
+                audit_result = await manager.get_audit_report()
+                if audit_result.is_error or audit_result.data is None:
+                    output_error(
+                        ctx,
+                        str(audit_result.error)
+                        if audit_result.is_error
+                        else "No data returned",
+                    )
+
+                report = audit_result.data
+                total_orphans = (
+                    len(report.orphaned_files)
+                    + len(report.orphaned_faces)
+                    + len(report.orphaned_vectors)
+                    + len(report.orphaned_mqtt_messages)
+                )
+
+                if total_orphans == 0:
+                    success = SuccessResponse(message="No orphaned resources found")
+                    output_sdk_result(ctx, success)
+                    return
+
+                click.confirm(
+                    f"Are you sure you want to clear {total_orphans} orphaned resources?",
+                    abort=True,
+                )
+
+            result = await manager.clear_orphans()
+
+            if result.is_error or result.data is None:
+                output_error(
+                    ctx, str(result.error) if result.is_error else "No data returned"
+                )
+
+            # Output SDK CleanupReport model directly
+            output_sdk_result(ctx, result.data)
+        except click.Abort:
+            output_error(ctx, "Cleanup cancelled")
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+@admin.group("compute")
+def admin_compute():
+    """Compute admin operations."""
+    pass
+
+
+@admin_compute.command("capabilities")
+@click.pass_context
+def compute_capabilities(ctx: click.Context):
+    """Show current worker capabilities and availability.
+
+    Examples:
+        cl-client admin compute capabilities
+    """
+
+    async def run():
+        config = ctx.obj.get("server_config")
+        if not config:
+            output_error(ctx, "Server configuration not found in context.")
+            return
+
+        async with ComputeClient(server_pref=config) as client:
+            try:
+                response = await client.get_capabilities()
+                output_sdk_result(ctx, response)
+            except Exception as e:
+                output_error(ctx, str(e))
+
+    asyncio.run(run())
+
+
+@admin_compute.command("get-guest-mode")
+@click.pass_context
+def compute_get_guest_mode(ctx: click.Context):
+    """Get compute guest mode configuration (admin only).
+
+    Examples:
+        cl-client admin compute get-guest-mode
+    """
+
+    async def run():
+        config = ctx.obj.get("server_config")
+        if not config:
+            output_error(ctx, "Server configuration not found in context.")
+            return
+
+        # Get session for auth
+        session = await get_session_manager(ctx)
+        try:
+            import httpx
+
+            # Call /admin/pref endpoint
+            url = f"{config.compute_url}/admin/pref"
+            headers = {"Authorization": f"Bearer {session.get_token()}"}
+
+            async with httpx.AsyncClient() as http_client:
+                response = await http_client.get(url, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+
+                # Create simple response
+                class GuestModeResponse(BaseModel):
+                    guest_mode: bool
+                    service: str = "compute"
+
+                guest_mode_data = GuestModeResponse(guest_mode=data["guest_mode"])
+                output_sdk_result(ctx, guest_mode_data)
+
+        except Exception as e:
+            output_error(ctx, str(e))
+        finally:
+            await session.close()
+
+    asyncio.run(run())
+
+
+@admin_compute.command("set-guest-mode")
+@click.argument("enabled", type=bool)
+@click.pass_context
+def compute_set_guest_mode(ctx: click.Context, enabled: bool):
+    """Enable or disable guest mode for compute (admin only).
+
+    Guest mode allows unauthenticated access to the compute service.
+
+    Examples:
+        cl-client admin compute set-guest-mode true
+        cl-client admin compute set-guest-mode false
+    """
+
+    async def run():
+        config = ctx.obj.get("server_config")
+        if not config:
+            output_error(ctx, "Server configuration not found in context.")
+            return
+
+        # Get session for auth
+        session = await get_session_manager(ctx)
+        try:
+            client = session.create_compute_client()
+            result = await client.update_guest_mode(guest_mode=enabled)
+
+            if result:
+                success = SuccessResponse(
+                    message=f"Compute guest mode {'enabled' if enabled else 'disabled'}"
+                )
+                output_sdk_result(ctx, success)
+            else:
+                output_error(ctx, "Failed to update guest mode")
+
+            await client.close()
+        except Exception as e:
+            output_error(ctx, str(e))
+        finally:
+            await session.close()
+
+    asyncio.run(run())
+
+
 # Store Commands
 
 
@@ -787,6 +1481,122 @@ def list_entities(
     asyncio.run(run())
 
 
+@store.command("upload")
+@click.argument("path", type=click.Path(exists=True, path_type=Path))
+@click.option("--label", help="Entity label/name (for single file)")
+@click.option("--description", help="Entity description")
+@click.option("--parent-id", type=int, help="Parent collection ID")
+@click.option("--recursive", "-r", is_flag=True, help="Recursively upload all images in directory")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation for batch uploads")
+@click.pass_context
+def upload_entity(
+    ctx: click.Context,
+    path: Path,
+    label: Optional[str],
+    description: Optional[str],
+    parent_id: Optional[int],
+    recursive: bool,
+    yes: bool,
+):
+    """Upload media file or directory to store.
+
+    Examples:
+        cl-client store upload photo.jpg --label "Beach Sunset"
+        cl-client store upload photo.jpg --label "Vacation" --description "Summer 2024" --parent-id 5
+        cl-client store upload photos/ --recursive --parent-id 5
+        cl-client store upload photos/ -r --yes  # Skip confirmation
+    """
+
+    async def run():
+        manager = await get_store_manager(ctx)
+        await manager.__aenter__()
+        try:
+            # Check if path is directory
+            if path.is_dir():
+                if recursive:
+                    # Find all images in directory
+                    image_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.heic'}
+                    image_files = [
+                        f for f in path.rglob('*')
+                        if f.is_file() and f.suffix.lower() in image_extensions
+                    ]
+
+                    if not image_files:
+                        output_error(ctx, f"No image files found in {path}")
+
+                    # Confirm batch upload
+                    if not yes:
+                        click.confirm(
+                            f"Found {len(image_files)} image(s) to upload. Continue?",
+                            abort=True,
+                        )
+
+                    # Upload each file
+                    success_count = 0
+                    output_json = ctx.obj.get("output_json", False)
+
+                    for img_file in image_files:
+                        try:
+                            # Use relative path as label if not provided
+                            file_label = str(img_file.relative_to(path))
+                            result = await manager.create_entity(
+                                label=file_label,
+                                description=description,
+                                is_collection=False,
+                                parent_id=parent_id,
+                                image_path=img_file,
+                            )
+
+                            if not result.is_error:
+                                success_count += 1
+                                if not output_json:
+                                    click.echo(f"✓ Uploaded: {file_label}", err=True)
+                            else:
+                                if not output_json:
+                                    click.echo(f"✗ Failed: {file_label} - {result.error}", err=True)
+
+                        except Exception as e:
+                            if not output_json:
+                                click.echo(f"✗ Error: {img_file.name} - {e}", err=True)
+
+                    # Output summary
+                    success = SuccessResponse(
+                        message=f"Uploaded {success_count}/{len(image_files)} images"
+                    )
+                    output_sdk_result(ctx, success)
+
+                else:
+                    output_error(ctx, f"{path} is a directory. Use --recursive to upload all images.")
+
+            else:
+                # Single file upload
+                result = await manager.create_entity(
+                    label=label or path.name,
+                    description=description,
+                    is_collection=False,
+                    parent_id=parent_id,
+                    image_path=path,
+                )
+
+                if result.is_error or result.data is None:
+                    output_error(
+                        ctx, str(result.error) if result.is_error else "No data returned"
+                    )
+
+                # Output SDK EntityResult model directly
+                output_sdk_result(ctx, result.data)
+
+        except click.Abort:
+            output_error(ctx, "Upload cancelled")
+        finally:
+            await manager.__aexit__(None, None, None)
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
 @store.command("create")
 @click.option("--label", help="Entity label/name")
 @click.option("--description", help="Entity description")
@@ -806,10 +1616,11 @@ def create_entity(
 ):
     """Create a new entity (collection or media with file).
 
+    DEPRECATED: Use 'upload' command instead for file uploads.
+
     Examples:
         cl-client store create --label "My Photos" --collection
         cl-client store create --label "Beach Sunset" --file sunset.jpg
-        cl-client store create --label "Vacation" --description "Summer 2024" --file photo.jpg --parent-id 5
     """
 
     async def run():
@@ -1114,86 +1925,21 @@ def get_versions(ctx: click.Context, entity_id: int, output: Optional[Path]):
 
 
 
-# Store Admin Commands
 
 
-@store.group("admin")
-def store_admin():
-    """Admin operations for store configuration."""
+# Compute Commands
+
+
+@cli.group("compute")
+def compute():
+    """Compute operations (media processing plugins)."""
     pass
-
-
-@store_admin.command("config")
-@click.pass_context
-def get_config(ctx: click.Context):
-    """Get store configuration (admin only).
-
-    Examples:
-        cl-client --username admin --password admin store admin config
-    """
-
-    async def run():
-        manager = await get_store_manager(ctx)
-        await manager.__aenter__()
-        try:
-            result = await manager.get_pref()
-
-            if result.is_error or result.data is None:
-                output_error(
-                    ctx, str(result.error) if result.is_error else "No data returned"
-                )
-
-            # Output SDK Config model directly
-            output_sdk_result(ctx, result.data)
-        finally:
-            await manager.__aexit__(None, None, None)
-            session = ctx.obj.get("session")
-            if session:
-                await session.close()
-
-    asyncio.run(run())
-
-
-@store_admin.command("set-guest-mode")
-@click.argument("enabled", type=bool)
-@click.pass_context
-def set_guest_mode(ctx: click.Context, enabled: bool):
-    """Enable or disable guest mode (admin only).
-
-    Guest mode allows unauthenticated access to the store service.
-
-    Examples:
-        cl-client store admin set-guest-mode true
-        cl-client store admin set-guest-mode false
-    """
-
-    async def run():
-        manager = await get_store_manager(ctx)
-        await manager.__aenter__()
-        try:
-            result = await manager.update_guest_mode(guest_mode=enabled)
-
-            if result.is_error:
-                output_error(ctx, str(result.error))
-
-            # Output success response for void operation
-            success = SuccessResponse(
-                message=f"Guest mode {'enabled' if enabled else 'disabled'}"
-            )
-            output_sdk_result(ctx, success)
-        finally:
-            await manager.__aexit__(None, None, None)
-            session = ctx.obj.get("session")
-            if session:
-                await session.close()
-
-    asyncio.run(run())
 
 
 # CLIP Embedding Commands
 
 
-@cli.group()
+@compute.group("clip-embedding")
 def clip_embedding():
     """CLIP image embedding operations."""
     pass
@@ -1300,7 +2046,7 @@ def embed(  # type: ignore[reportRedeclaration]
 # Media Thumbnail Commands
 
 
-@cli.group()
+@compute.group("media-thumbnail")
 def media_thumbnail():
     """Media thumbnail generation."""
     pass
@@ -1407,7 +2153,7 @@ def generate(
 # Hash Commands
 
 
-@cli.group()
+@compute.group("hash")
 def hash():
     """Perceptual image hashing."""
     pass
@@ -1498,7 +2244,7 @@ def compute_hash(
 # EXIF Commands
 
 
-@cli.group()
+@compute.group("exif")
 def exif():
     """EXIF metadata extraction."""
     pass
@@ -1589,7 +2335,7 @@ def extract(
 # Image Conversion Commands
 
 
-@cli.group()
+@compute.group("image-conversion")
 def image_conversion():
     """Image format conversion."""
     pass
@@ -1703,7 +2449,7 @@ if __name__ == "__main__":
 # DINO Embedding Commands
 
 
-@cli.group()
+@compute.group("dino-embedding")
 def dino_embedding():
     """DINO image embedding operations."""
     pass
@@ -1787,13 +2533,202 @@ def embed(  # type: ignore[reportRedeclaration]
     asyncio.run(run())
 
 
+# Face Detection Commands
 
+
+@compute.group("face-detection")
+def face_detection():
+    """Face detection operations."""
+    pass
+
+
+@face_detection.command("detect")
+@click.argument("image", type=click.Path(exists=True, path_type=Path))
+@click.option("--watch", "-w", is_flag=True, help="Watch progress in real-time")
+@click.option("--timeout", "-t", default=60.0, help="Timeout in seconds")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Download face images to this directory",
+)
+@click.pass_context
+def detect_faces(
+    ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]
+):
+    """Detect faces in an image.
+
+    Returns bounding boxes, confidence scores, landmarks, and cropped face images.
+
+    Examples:
+        cl-client compute face-detection detect photo.jpg
+        cl-client compute face-detection detect photo.jpg --output faces/
+        cl-client compute face-detection detect photo.jpg --watch
+    """
+
+    async def run():
+        client = await get_client(ctx)
+        try:
+            if watch:
+                tracker = JobProgressTracker(
+                    ctx, job_id="pending", description=f"Face detection: {image.name}"
+                )
+                with tracker:
+                    job = await client.face_detection.detect(
+                        image=image,
+                        on_progress=tracker.on_progress,
+                        on_complete=tracker.on_complete,
+                    )
+                    tracker.job_id = job.job_id
+                    final_job = await tracker.wait(timeout=timeout)
+
+                if final_job and final_job.status == "completed":
+                    console.print("[green]✓ Face detection completed[/green]")
+                    print_job_result(ctx, final_job)
+
+                    # Download face images if output specified
+                    if output and final_job.task_output and "faces" in final_job.task_output:
+                        output.mkdir(parents=True, exist_ok=True)
+                        faces = final_job.task_output["faces"]
+                        for i, face in enumerate(faces):
+                            if "file_path" in face:
+                                face_file = output / f"face_{i}.png"
+                                await client.download_job_file(
+                                    final_job.job_id, face["file_path"], face_file
+                                )
+                        console.print(
+                            f"[green]✓ Downloaded {len(faces)} face(s) to {output}[/green]"
+                        )
+
+                elif final_job:
+                    output_error(ctx, f"Failed: {final_job.error_message}")
+            else:
+                with console.status("[bold green]Processing..."):
+                    job = await client.face_detection.detect(
+                        image=image, wait=True, timeout=timeout
+                    )
+
+                if job.status == "completed":
+                    console.print("[green]✓ Completed[/green]")
+                    print_job_result(ctx, job)
+
+                    if output and job.task_output and "faces" in job.task_output:
+                        output.mkdir(parents=True, exist_ok=True)
+                        faces = job.task_output["faces"]
+                        for i, face in enumerate(faces):
+                            if "file_path" in face:
+                                face_file = output / f"face_{i}.png"
+                                await client.download_job_file(
+                                    job.job_id, face["file_path"], face_file
+                                )
+                        console.print(
+                            f"[green]✓ Downloaded {len(faces)} face(s) to {output}[/green]"
+                        )
+                else:
+                    output_error(ctx, f"Failed: {job.error_message}")
+
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
+
+
+# Face Embedding Commands
+
+
+@compute.group("face-embedding")
+def face_embedding():
+    """Face embedding operations."""
+    pass
+
+
+@face_embedding.command("embed")
+@click.argument("image", type=click.Path(exists=True, path_type=Path))
+@click.option("--watch", "-w", is_flag=True, help="Watch progress in real-time")
+@click.option("--timeout", "-t", default=60.0, help="Timeout in seconds")
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Download embeddings to this file",
+)
+@click.pass_context
+def embed_faces(
+    ctx: click.Context, image: Path, watch: bool, timeout: float, output: Optional[Path]
+):
+    """Generate face embeddings from an image.
+
+    Returns 128-dimensional embeddings for each detected face.
+
+    Examples:
+        cl-client compute face-embedding embed photo.jpg
+        cl-client compute face-embedding embed photo.jpg --output embeddings.npy
+        cl-client compute face-embedding embed photo.jpg --watch
+    """
+
+    async def run():
+        client = await get_client(ctx)
+        try:
+            if watch:
+                tracker = JobProgressTracker(
+                    ctx, job_id="pending", description=f"Face embedding: {image.name}"
+                )
+                with tracker:
+                    job = await client.face_embedding.embed_faces(
+                        image=image,
+                        on_progress=tracker.on_progress,
+                        on_complete=tracker.on_complete,
+                    )
+                    tracker.job_id = job.job_id
+                    final_job = await tracker.wait(timeout=timeout)
+
+                if final_job and final_job.status == "completed":
+                    console.print("[green]✓ Face embeddings generated[/green]")
+                    print_job_result(ctx, final_job)
+
+                    # Download if output specified
+                    if output and final_job.params and "output_path" in final_job.params:
+                        output_path = final_job.params["output_path"]
+                        await client.download_job_file(
+                            final_job.job_id, str(output_path), output
+                        )
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
+
+                elif final_job:
+                    output_error(ctx, f"Failed: {final_job.error_message}")
+            else:
+                with console.status("[bold green]Processing..."):
+                    job = await client.face_embedding.embed_faces(
+                        image=image, wait=True, timeout=timeout
+                    )
+
+                if job.status == "completed":
+                    console.print("[green]✓ Completed[/green]")
+                    print_job_result(ctx, job)
+
+                    if output and job.params and "output_path" in job.params:
+                        output_path = job.params["output_path"]
+                        await client.download_job_file(job.job_id, str(output_path), output)
+                        console.print(f"[green]✓ Downloaded to {output}[/green]")
+                else:
+                    output_error(ctx, f"Failed: {job.error_message}")
+
+        finally:
+            await client.close()
+            session = ctx.obj.get("session")
+            if session:
+                await session.close()
+
+    asyncio.run(run())
 
 
 # HLS Streaming Commands
 
 
-@cli.group()
+@compute.group("hls-streaming")
 def hls_streaming():
     """HLS manifest generation for video streaming."""
     pass
@@ -1953,85 +2888,6 @@ def get_intelligence(ctx: click.Context, entity_id: int, output: Optional[Path])
                 await session.close()
 
     asyncio.run(run())
-
-
-@store_admin.command("audit-report")
-@click.option("--output", "-o", type=click.Path(path_type=Path), help="Save report to file")
-@click.pass_context
-def audit_report(ctx: click.Context, output: Optional[Path]):
-    """Generate audit report of orphaned resources (admin only)."""
-
-    async def run():
-        manager = await get_store_manager(ctx)
-        await manager.__aenter__()
-        try:
-            result = await manager.get_audit_report()
-            
-            if result.is_error or result.data is None:
-                output_error(
-                    ctx, str(result.error) if result.is_error else "Failed to generate audit report"
-                )
-
-            output_sdk_result(ctx, result.data)
-
-            if output:
-                with open(output, "w") as f:
-                    f.write(result.data.model_dump_json(indent=2))
-                if not should_use_json(ctx):
-                    click.echo(f"Saved to {output}", err=True)
-        except Exception as e:
-            output_error(ctx, str(e))
-        finally:
-            await manager.__aexit__(None, None, None)
-            session = ctx.obj.get("session")
-            if session:
-                await session.close()
-
-    asyncio.run(run())
-
-
-@store_admin.command("clear-orphans")
-@click.option("--yes", is_flag=True, help="Skip confirmation prompt")
-@click.pass_context
-def clear_orphans(ctx: click.Context, yes: bool):
-    """Remove all orphaned resources (admin only)."""
-
-    async def run():
-        manager = await get_store_manager(ctx)
-        await manager.__aenter__()
-        try:
-            if not yes:
-                click.confirm(
-                    "Are you sure you want to clear ALL orphaned resources? This action cannot be undone.",
-                    abort=True,
-                )
-
-            result = await manager.clear_orphans()
-            
-            if result.is_error or result.data is None:
-                output_error(
-                    ctx, str(result.error) if result.is_error else "Failed to clear orphans"
-                )
-
-            output_sdk_result(ctx, result.data)
-        except click.Abort:
-            output_error(ctx, "Cleanup cancelled")
-        except Exception as e:
-            output_error(ctx, str(e))
-        finally:
-            await manager.__aexit__(None, None, None)
-            session = ctx.obj.get("session")
-            if session:
-                await session.close()
-
-    asyncio.run(run())
-cli.add_command(compute)
-cli.add_command(store)
-cli.add_command(user)
-cli.add_command(image_conversion)
-cli.add_command(dino_embedding)
-
-cli.add_command(hls_streaming)
 
 
 if __name__ == "__main__":

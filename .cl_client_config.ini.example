@@ -1,0 +1,15 @@
+# CL Client CLI Configuration File
+# Copy this file to ~/.cl_client_config.ini and update with your values
+
+[cl_client]
+# Required service URLs
+auth_url = http://localhost:8010
+compute_url = http://localhost:8012
+store_url = http://localhost:8011
+mqtt_url = mqtt://localhost:1883
+
+# Username for authentication
+username = admin
+
+# Note: Password is NOT stored in config for security
+# Instead, it will be cached securely after first login (6-hour expiration)
