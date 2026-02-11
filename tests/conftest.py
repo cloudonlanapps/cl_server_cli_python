@@ -569,11 +569,25 @@ def temp_video_file(tmp_path: Path) -> Path:
     return video_file
 
 
+@pytest.fixture(autouse=True)
+def mock_config():
+    """Mock load_config_file to return empty config during tests."""
+    with patch("cl_client_cli.common.load_config_file") as mock:
+        mock.return_value = {
+            "auth_url": None,
+            "compute_url": None,
+            "store_url": None,
+            "mqtt_url": None,
+            "username": None,
+        }
+        yield mock
+
+
 @pytest.fixture
 def mock_compute_client():
     """Create a mock ComputeClient for CLI testing."""
-    with patch("cl_client_cli.main.ComputeClient") as mock_client_class:
-        # Create mock client instance
+    # Mock get_client in main.py to return our mock instance
+    with patch("cl_client_cli.common.get_client", new_callable=AsyncMock) as mock_get_client:
         mock_client = MagicMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
@@ -591,8 +605,8 @@ def mock_compute_client():
         mock_client.image_conversion = MagicMock()
         mock_client.media_thumbnail = MagicMock()
 
-        # Configure the class to return our mock instance
-        mock_client_class.return_value = mock_client
+        # Configure the getter to return our mock instance
+        mock_get_client.return_value = mock_client
 
         yield mock_client
 
@@ -660,7 +674,8 @@ def failed_job() -> JobResponse:
 @pytest.fixture
 def mock_store_manager():
     """Create a mock StoreManager for CLI testing."""
-    with patch("cl_client_cli.main.StoreManager") as mock_manager_class:
+    # Mock get_store_manager in main.py to return our mock instance
+    with patch("cl_client_cli.common.get_store_manager", new_callable=AsyncMock) as mock_get_manager:
         # Create mock manager instance
         mock_manager = MagicMock()
         mock_manager.__aenter__ = AsyncMock(return_value=mock_manager)
@@ -681,14 +696,8 @@ def mock_store_manager():
         mock_manager.get_audit_report = AsyncMock()
         mock_manager.clear_orphans = AsyncMock()
 
-        # Mock _store_client for database methods
-        mock_store_client = MagicMock()
-        mock_store_client.__aexit__ = AsyncMock(return_value=None)
-
-
-        # Configure the class methods
-        mock_manager_class.guest = MagicMock(return_value=mock_manager)
-        mock_manager_class.authenticated = MagicMock(return_value=mock_manager)
+        # Configure the getter to return our mock instance
+        mock_get_manager.return_value = mock_manager
 
         yield mock_manager
 

@@ -29,7 +29,7 @@ class TestClipEmbedding:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["clip-embedding", "embed", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "clip-embedding", "embed", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -50,7 +50,7 @@ class TestClipEmbedding:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["clip-embedding", "embed", "--watch", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "clip-embedding", "embed", "--watch", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -59,7 +59,7 @@ class TestClipEmbedding:
     def test_embed_missing_file(self, mock_compute_client, mandatory_args):
         """Test clip-embedding embed with missing file."""
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["clip-embedding", "embed", "/nonexistent/file.jpg"])
+        result = runner.invoke(cli, mandatory_args + ["compute", "clip-embedding", "embed", "/nonexistent/file.jpg"])
 
         # Should fail validation before calling API
         assert result.exit_code != 0
@@ -87,7 +87,7 @@ class TestDinoEmbedding:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["dino-embedding", "embed", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "dino-embedding", "embed", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -121,7 +121,7 @@ class TestExif:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["exif", "extract", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "exif", "extract", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -155,7 +155,7 @@ class TestHash:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["hash", "compute", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "hash", "compute", str(temp_image_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -189,7 +189,7 @@ class TestHlsStreaming:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["hls-streaming", "generate-manifest", str(temp_video_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "hls-streaming", "generate-manifest", str(temp_video_file)])
 
         # Verify
         assert result.exit_code == 0
@@ -220,7 +220,7 @@ class TestImageConversion:
         # Run command
         runner = CliRunner()
         result = runner.invoke(
-            cli, mandatory_args + ["image-conversion", "convert", str(temp_image_file), "--format", "png"]
+            cli, mandatory_args + ["compute", "image-conversion", "convert", str(temp_image_file), "--format", "png"]
         )
 
         # Verify
@@ -250,6 +250,7 @@ class TestImageConversion:
         result = runner.invoke(
             cli,
             mandatory_args + [
+                "compute",
                 "image-conversion",
                 "convert",
                 str(temp_image_file),
@@ -291,7 +292,7 @@ class TestMediaThumbnail:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            mandatory_args + ["media-thumbnail", "generate", str(temp_image_file), "--width", "256", "--height", "256"],
+            mandatory_args + ["compute", "media-thumbnail", "generate", str(temp_image_file), "--width", "256", "--height", "256"],
         )
 
         # Verify
@@ -321,6 +322,7 @@ class TestMediaThumbnail:
         result = runner.invoke(
             cli,
             mandatory_args + [
+                "compute",
                 "media-thumbnail",
                 "generate",
                 str(temp_image_file),
@@ -361,7 +363,7 @@ class TestErrorHandling:
 
         # Run command
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["clip-embedding", "embed", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "clip-embedding", "embed", str(temp_image_file)])
 
         # Should show error but may exit 0 (depends on implementation)
         assert "failed" in result.output.lower() or "error" in result.output.lower()
@@ -373,7 +375,7 @@ class TestErrorHandling:
         # Run command with custom timeout
         runner = CliRunner()
         result = runner.invoke(
-            cli, mandatory_args + ["clip-embedding", "embed", "--timeout", "120", str(temp_image_file)]
+            cli, mandatory_args + ["compute", "clip-embedding", "embed", "--timeout", "120", str(temp_image_file)]
         )
 
         # Verify timeout was passed
@@ -408,7 +410,7 @@ class TestAdditionalCommands:
         mock_compute_client.dino_embedding.embed_image = AsyncMock(side_effect=mock_embed)
 
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["dino-embedding", "embed", "--watch", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "dino-embedding", "embed", "--watch", str(temp_image_file)])
 
         assert result.exit_code == 0
         mock_compute_client.dino_embedding.embed_image.assert_called_once()
@@ -436,7 +438,7 @@ class TestAdditionalCommands:
         mock_compute_client.exif.extract = AsyncMock(side_effect=mock_extract)
 
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["exif", "extract", "--watch", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "exif", "extract", "--watch", str(temp_image_file)])
 
         assert result.exit_code == 0
         mock_compute_client.exif.extract.assert_called_once()
@@ -464,7 +466,7 @@ class TestAdditionalCommands:
         mock_compute_client.hash.compute = AsyncMock(side_effect=mock_compute)
 
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["hash", "compute", "--watch", str(temp_image_file)])
+        result = runner.invoke(cli, mandatory_args + ["compute", "hash", "compute", "--watch", str(temp_image_file)])
 
         assert result.exit_code == 0
         mock_compute_client.hash.compute.assert_called_once()
@@ -494,7 +496,7 @@ class TestAdditionalCommands:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            mandatory_args + ["image-conversion", "convert", "--watch", str(temp_image_file), "--format", "png"],
+            mandatory_args + ["compute", "image-conversion", "convert", "--watch", str(temp_image_file), "--format", "png"],
         )
 
         assert result.exit_code == 0
@@ -526,6 +528,7 @@ class TestAdditionalCommands:
         result = runner.invoke(
             cli,
             mandatory_args + [
+                "compute",
                 "media-thumbnail",
                 "generate",
                 "--watch",
@@ -794,7 +797,7 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["store", "admin", "config"])
+        result = runner.invoke(cli, mandatory_args + ["admin", "store", "config"])
 
         assert result.exit_code == 0
         # Parse JSON output and verify config data
@@ -811,7 +814,7 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["store", "admin", "set-guest-mode", "false"])
+        result = runner.invoke(cli, mandatory_args + ["admin", "store", "set-guest-mode", "false"])
 
         # Verify config was updated
         assert result.exit_code == 0
@@ -856,7 +859,7 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["store", "admin", "audit-report"])
+        result = runner.invoke(cli, mandatory_args + ["admin", "store", "audit-report"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -871,7 +874,7 @@ class TestStoreCommands:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["store", "admin", "clear-orphans", "--yes"])
+        result = runner.invoke(cli, mandatory_args + ["admin", "store", "clear-orphans", "--yes"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -901,7 +904,7 @@ class TestAuthErrors:
         )
 
         runner = CliRunner()
-        result = runner.invoke(cli, mandatory_args + ["store", "admin", "config"])
+        result = runner.invoke(cli, mandatory_args + ["admin", "store", "config"])
 
         assert result.exit_code != 0
         assert "Forbidden" in result.output
