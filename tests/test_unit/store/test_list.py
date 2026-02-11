@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.store_models import StoreOperationResult, EntityListResponse
 from cl_client_cli.main import cli
 
-def test_store_list_success(mock_store_manager, sample_entity_list, mandatory_args):
+def test_store_list_success(mock_store_manager, sample_entity_list):
     """Test store list command."""
     # Configure mock to return success result
     mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
@@ -15,7 +15,7 @@ def test_store_list_success(mock_store_manager, sample_entity_list, mandatory_ar
 
     # Run command
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["store", "list"])
+    result = runner.invoke(cli, ["store", "list"])
 
     # Verify
     assert result.exit_code == 0
@@ -23,7 +23,7 @@ def test_store_list_success(mock_store_manager, sample_entity_list, mandatory_ar
     assert "Entity 2" in result.output
     mock_store_manager.list_entities.assert_called_once()
 
-def test_store_list_with_pagination(mock_store_manager, sample_entity_list, mandatory_args):
+def test_store_list_with_pagination(mock_store_manager, sample_entity_list):
     """Test store list with pagination options."""
     mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
         success="Success",
@@ -31,7 +31,7 @@ def test_store_list_with_pagination(mock_store_manager, sample_entity_list, mand
     )
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["store", "list", "--page", "2", "--page-size", "10"])
+    result = runner.invoke(cli, ["store", "list", "--page", "2", "--page-size", "10"])
 
     assert result.exit_code == 0
     # Verify pagination parameters were passed
@@ -39,7 +39,7 @@ def test_store_list_with_pagination(mock_store_manager, sample_entity_list, mand
     assert call_kwargs["page"] == 2
     assert call_kwargs["page_size"] == 10
 
-def test_store_list_with_search(mock_store_manager, sample_entity_list, mandatory_args):
+def test_store_list_with_search(mock_store_manager, sample_entity_list):
     """Test store list with search query."""
     mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
         success="Success",
@@ -47,20 +47,20 @@ def test_store_list_with_search(mock_store_manager, sample_entity_list, mandator
     )
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["store", "list", "--search", "test query"])
+    result = runner.invoke(cli, ["store", "list", "--search", "test query"])
 
     assert result.exit_code == 0
     call_kwargs = mock_store_manager.list_entities.call_args[1]
     assert call_kwargs["search_query"] == "test query"
 
-def test_store_list_error(mock_store_manager, mandatory_args):
+def test_store_list_error(mock_store_manager):
     """Test store list with error."""
     mock_store_manager.list_entities.return_value = StoreOperationResult[EntityListResponse](
         error="Unauthorized: Invalid token",
     )
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["store", "list"])
+    result = runner.invoke(cli, ["store", "list"])
 
     assert result.exit_code != 0
     assert "Unauthorized" in result.output

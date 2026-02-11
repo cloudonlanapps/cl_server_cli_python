@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.store_models import StoreOperationResult
 from cl_client_cli.main import cli
 
-def test_store_versions_success(mock_store_manager, sample_versions, mandatory_args):
+def test_store_versions_success(mock_store_manager, sample_versions):
     """Test store versions command."""
     mock_store_manager.get_versions.return_value = StoreOperationResult[list](
         success="Version history retrieved successfully",
@@ -13,7 +13,7 @@ def test_store_versions_success(mock_store_manager, sample_versions, mandatory_a
     )
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["store", "versions", "1"])
+    result = runner.invoke(cli, ["store", "versions", "1"])
 
     assert result.exit_code == 0
     assert "Version 1" in result.output

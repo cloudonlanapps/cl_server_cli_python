@@ -28,14 +28,12 @@ class TestAuthErrorsCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test store read operation without authentication returns JSON error."""
         # Execute CLI command with invalid credentials to ensure error
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--username",
                 "invalid",
                 "--password",
@@ -54,7 +52,6 @@ class TestAuthErrorsCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test store read operation with invalid credentials returns JSON error.
 
@@ -63,8 +60,7 @@ class TestAuthErrorsCLI:
         # Execute CLI command with invalid credentials
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--username",
                 "invalid_user",
                 "--password",
@@ -84,14 +80,12 @@ class TestAuthErrorsCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test store write operation without authentication returns JSON error."""
         # Execute CLI command without credentials
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--username",
                 "invalid",
                 "--password",
@@ -115,14 +109,12 @@ class TestAuthErrorsCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test plugin operation without authentication returns JSON error."""
         # Execute CLI command with invalid credentials to ensure error
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--username",
                 "invalid",
                 "--password",
@@ -142,15 +134,13 @@ class TestAuthErrorsCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test admin operation without admin role returns JSON error."""
         username = f"test_nonadmin_{uuid.uuid4().hex[:8]}"
         # First create a non-admin user
         admin_create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -167,8 +157,7 @@ class TestAuthErrorsCLI:
         # Try to use admin command as non-admin user
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--username",
                 username,
                 "--password",
@@ -189,15 +178,13 @@ class TestAuthErrorsCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test write operation without write permission returns JSON error."""
         username = f"test_readonly_{uuid.uuid4().hex[:8]}"
         # First create a user with read-only permissions
         admin_create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -214,8 +201,7 @@ class TestAuthErrorsCLI:
         # Try to create entity as read-only user
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--username",
                 username,
                 "--password",
@@ -238,14 +224,12 @@ class TestAuthErrorsCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test read operation in guest mode with JSON output."""
         # Execute CLI command without credentials
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "store",
                 "admin",

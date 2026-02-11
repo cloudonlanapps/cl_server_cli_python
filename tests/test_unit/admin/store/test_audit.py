@@ -6,7 +6,7 @@ from click.testing import CliRunner
 from cl_client.store_models import StoreOperationResult
 from cl_client_cli.main import cli
 
-def test_store_admin_audit_report(mock_store_manager, sample_audit_report, mandatory_args):
+def test_store_admin_audit_report(mock_store_manager, sample_audit_report):
     """Test store admin audit-report command."""
     mock_store_manager.get_audit_report.return_value = StoreOperationResult(
         success="Audit report retrieved successfully",
@@ -14,7 +14,7 @@ def test_store_admin_audit_report(mock_store_manager, sample_audit_report, manda
     )
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["admin", "store", "audit-report"])
+    result = runner.invoke(cli, ["admin", "store", "audit-report"])
 
     assert result.exit_code == 0
     data = json.loads(result.output)

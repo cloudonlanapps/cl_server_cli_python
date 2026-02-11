@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.models import JobResponse
 from cl_client_cli.main import cli
 
-def test_extract_polling_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_extract_polling_mode(mock_compute_client, temp_image_file):
     """Test exif extract in polling mode."""
     # Configure mock
     job = JobResponse(
@@ -28,7 +28,7 @@ def test_extract_polling_mode(mock_compute_client, temp_image_file, mandatory_ar
 
     # Run command
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["compute", "exif", "extract", str(temp_image_file)])
+    result = runner.invoke(cli, ["compute", "exif", "extract", str(temp_image_file)])
 
     # Verify
     assert result.exit_code == 0
@@ -36,7 +36,7 @@ def test_extract_polling_mode(mock_compute_client, temp_image_file, mandatory_ar
     assert "EOS 5D Mark IV" in result.output
     mock_compute_client.exif.extract.assert_called_once()
 
-def test_exif_watch_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_exif_watch_mode(mock_compute_client, temp_image_file):
     """Test exif extract with watch mode."""
     job = JobResponse(
         job_id="test-job-exif-watch",
@@ -59,7 +59,7 @@ def test_exif_watch_mode(mock_compute_client, temp_image_file, mandatory_args):
     mock_compute_client.exif.extract = AsyncMock(side_effect=mock_extract)
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["compute", "exif", "extract", "--watch", str(temp_image_file)])
+    result = runner.invoke(cli, ["compute", "exif", "extract", "--watch", str(temp_image_file)])
 
     assert result.exit_code == 0
     mock_compute_client.exif.extract.assert_called_once()

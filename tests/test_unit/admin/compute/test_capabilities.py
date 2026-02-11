@@ -6,7 +6,7 @@ from cl_client_cli.main import cli
 
 
 @patch("cl_client_cli.admin.compute.capabilities.common.get_session_manager")
-def test_capabilities_success(mock_get_session, mandatory_args):
+def test_capabilities_success(mock_get_session):
     """Test admin compute capabilities command."""
     # Mock capabilities response as a Pydantic-like object
     mock_capabilities = MagicMock()
@@ -22,7 +22,7 @@ def test_capabilities_success(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "compute", "capabilities"]
+        ["admin", "compute", "capabilities"]
     )
 
     assert result.exit_code == 0
@@ -30,7 +30,7 @@ def test_capabilities_success(mock_get_session, mandatory_args):
 
 
 @patch("cl_client_cli.admin.compute.capabilities.common.get_session_manager")
-def test_capabilities_error(mock_get_session, mandatory_args):
+def test_capabilities_error(mock_get_session):
     """Test admin compute capabilities command with error."""
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
@@ -42,7 +42,7 @@ def test_capabilities_error(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "compute", "capabilities"]
+        ["admin", "compute", "capabilities"]
     )
 
     # Should handle error gracefully

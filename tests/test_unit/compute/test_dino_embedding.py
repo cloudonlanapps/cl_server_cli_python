@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.models import JobResponse
 from cl_client_cli.main import cli
 
-def test_embed_polling_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_embed_polling_mode(mock_compute_client, temp_image_file):
     """Test dino-embedding embed in polling mode."""
     # Configure mock
     job = JobResponse(
@@ -24,14 +24,14 @@ def test_embed_polling_mode(mock_compute_client, temp_image_file, mandatory_args
 
     # Run command
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["compute", "dino-embedding", "embed", str(temp_image_file)])
+    result = runner.invoke(cli, ["compute", "dino-embedding", "embed", str(temp_image_file)])
 
     # Verify
     assert result.exit_code == 0
     assert "test-job-456" in result.output
     mock_compute_client.dino_embedding.embed_image.assert_called_once()
 
-def test_dino_watch_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_dino_watch_mode(mock_compute_client, temp_image_file):
     """Test dino-embedding with watch mode."""
     job = JobResponse(
         job_id="test-job-watch",
@@ -54,7 +54,7 @@ def test_dino_watch_mode(mock_compute_client, temp_image_file, mandatory_args):
     mock_compute_client.dino_embedding.embed_image = AsyncMock(side_effect=mock_embed)
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["compute", "dino-embedding", "embed", "--watch", str(temp_image_file)])
+    result = runner.invoke(cli, ["compute", "dino-embedding", "embed", "--watch", str(temp_image_file)])
 
     assert result.exit_code == 0
     mock_compute_client.dino_embedding.embed_image.assert_called_once()

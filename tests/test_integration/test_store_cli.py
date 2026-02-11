@@ -33,15 +33,13 @@ class TestStoreCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test store create and get commands with JSON output."""
         label = f"test_store_create_{uuid.uuid4().hex[:8]}"
         # Create entity
         create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "store",
                 "create",
@@ -62,8 +60,7 @@ class TestStoreCLI:
         # Get the created entity
         get_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "store",
                 "get",
@@ -80,13 +77,11 @@ class TestStoreCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test store list command with JSON output."""
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "store",
                 "list",
@@ -110,7 +105,6 @@ class TestStoreCLI:
         cli_env: dict[str, str],
         test_helper: SyncTestHelper,
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test store update command with JSON output."""
         # Create entity first
@@ -124,8 +118,7 @@ class TestStoreCLI:
         # Update the entity
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "store",
                 "update",
@@ -145,7 +138,6 @@ class TestStoreCLI:
         cli_env: dict[str, str],
         test_helper: SyncTestHelper,
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test store patch command with JSON output."""
         # Create entity first
@@ -159,8 +151,7 @@ class TestStoreCLI:
         # Patch the entity
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "store",
                 "patch",
@@ -180,7 +171,6 @@ class TestStoreCLI:
         cli_env: dict[str, str],
         test_helper: SyncTestHelper,
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test store delete command with JSON output."""
         # Create entity first
@@ -194,8 +184,7 @@ class TestStoreCLI:
         # Delete the entity
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "store",
                 "delete",
@@ -214,7 +203,6 @@ class TestStoreCLI:
         cli_env: dict[str, str],
         test_helper: SyncTestHelper,
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test store versions command with JSON output."""
         # Create entity first
@@ -228,8 +216,7 @@ class TestStoreCLI:
         # Get versions
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "store",
                 "versions",
@@ -247,13 +234,11 @@ class TestStoreCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test store admin config command with JSON output."""
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin",
                 "store",

@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.models import JobResponse
 from cl_client_cli.main import cli
 
-def test_convert_polling_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_convert_polling_mode(mock_compute_client, temp_image_file):
     """Test image-conversion convert in polling mode."""
     # Configure mock
     job = JobResponse(
@@ -25,7 +25,7 @@ def test_convert_polling_mode(mock_compute_client, temp_image_file, mandatory_ar
     # Run command
     runner = CliRunner()
     result = runner.invoke(
-        cli, mandatory_args + ["compute", "image-conversion", "convert", str(temp_image_file), "--format", "png"]
+        cli, ["compute", "image-conversion", "convert", str(temp_image_file), "--format", "png"]
     )
 
     # Verify
@@ -33,7 +33,7 @@ def test_convert_polling_mode(mock_compute_client, temp_image_file, mandatory_ar
     assert "test-job-mno" in result.output
     mock_compute_client.image_conversion.convert.assert_called_once()
 
-def test_convert_with_quality(mock_compute_client, temp_image_file, mandatory_args):
+def test_convert_with_quality(mock_compute_client, temp_image_file):
     """Test image-conversion convert with quality parameter."""
     # Configure mock
     job = JobResponse(
@@ -54,7 +54,7 @@ def test_convert_with_quality(mock_compute_client, temp_image_file, mandatory_ar
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + [
+        [
             "compute",
             "image-conversion",
             "convert",
@@ -72,7 +72,7 @@ def test_convert_with_quality(mock_compute_client, temp_image_file, mandatory_ar
     call_kwargs = mock_compute_client.image_conversion.convert.call_args[1]
     assert call_kwargs["quality"] == 90
 
-def test_image_conversion_watch_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_image_conversion_watch_mode(mock_compute_client, temp_image_file):
     """Test image-conversion convert with watch mode."""
     job = JobResponse(
         job_id="test-job-convert-watch",
@@ -97,7 +97,7 @@ def test_image_conversion_watch_mode(mock_compute_client, temp_image_file, manda
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["compute", "image-conversion", "convert", "--watch", str(temp_image_file), "--format", "png"],
+        ["compute", "image-conversion", "convert", "--watch", str(temp_image_file), "--format", "png"],
     )
 
     assert result.exit_code == 0

@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.models import JobResponse
 from cl_client_cli.main import cli
 
-def test_generate_manifest_polling_mode(mock_compute_client, temp_video_file, mandatory_args):
+def test_generate_manifest_polling_mode(mock_compute_client, temp_video_file):
     """Test hls-streaming generate-manifest in polling mode."""
     # Configure mock
     job = JobResponse(
@@ -27,7 +27,7 @@ def test_generate_manifest_polling_mode(mock_compute_client, temp_video_file, ma
 
     # Run command
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["compute", "hls-streaming", "generate-manifest", str(temp_video_file)])
+    result = runner.invoke(cli, ["compute", "hls-streaming", "generate-manifest", str(temp_video_file)])
 
     # Verify
     assert result.exit_code == 0

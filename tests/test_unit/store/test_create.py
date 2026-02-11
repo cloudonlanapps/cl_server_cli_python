@@ -6,7 +6,7 @@ from click.testing import CliRunner
 from cl_client.store_models import StoreOperationResult, Entity
 from cl_client_cli.main import cli
 
-def test_store_create_collection(mock_store_manager, sample_collection, mandatory_args):
+def test_store_create_collection(mock_store_manager, sample_collection):
     """Test creating a collection."""
     mock_store_manager.create_entity.return_value = StoreOperationResult[Entity](
         success="Entity created successfully",
@@ -16,7 +16,7 @@ def test_store_create_collection(mock_store_manager, sample_collection, mandator
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["store", "create", "--label", "Test Collection", "--collection"],
+        ["store", "create", "--label", "Test Collection", "--collection"],
     )
 
     assert result.exit_code == 0
@@ -29,7 +29,7 @@ def test_store_create_collection(mock_store_manager, sample_collection, mandator
     assert call_kwargs["label"] == "Test Collection"
     assert call_kwargs["is_collection"] is True
 
-def test_store_create_with_file(mock_store_manager, sample_entity, temp_image_file, mandatory_args):
+def test_store_create_with_file(mock_store_manager, sample_entity, temp_image_file):
     """Test creating entity with file upload."""
     mock_store_manager.create_entity.return_value = StoreOperationResult[Entity](
         success="Entity created successfully",
@@ -39,7 +39,7 @@ def test_store_create_with_file(mock_store_manager, sample_entity, temp_image_fi
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + [
+        [
             "store",
             "create",
             "--label",

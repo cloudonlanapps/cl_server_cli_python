@@ -7,7 +7,7 @@ from cl_client.auth_models import UserResponse
 from datetime import datetime
 
 @patch("cl_client_cli.admin.user.create.common.get_session_manager")
-def test_user_create(mock_get_session, mandatory_args):
+def test_user_create(mock_get_session):
     """Test admin user create command."""
     # Mock session and auth_client with proper SDK model
     mock_user = UserResponse(
@@ -27,14 +27,14 @@ def test_user_create(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "user", "create", "newuser", "pass123"]
+        ["admin", "user", "create", "newuser", "pass123"]
     )
 
     assert result.exit_code == 0
     assert "newuser" in result.output
 
 @patch("cl_client_cli.admin.user.list.common.get_session_manager")
-def test_user_list(mock_get_session, mandatory_args):
+def test_user_list(mock_get_session):
     """Test admin user list command."""
     mock_users = [
         UserResponse(id=1, username="user1", is_admin=False, permissions=[], created_at=datetime.now()),
@@ -50,13 +50,13 @@ def test_user_list(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "user", "list"]
+        ["admin", "user", "list"]
     )
 
     assert result.exit_code == 0
 
 @patch("cl_client_cli.admin.user.get.common.get_session_manager")
-def test_user_get(mock_get_session, mandatory_args):
+def test_user_get(mock_get_session):
     """Test admin user get command."""
     mock_user = UserResponse(
         id=1,
@@ -75,14 +75,14 @@ def test_user_get(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "user", "get", "1"]
+        ["admin", "user", "get", "1"]
     )
 
     assert result.exit_code == 0
     assert "testuser" in result.output
 
 @patch("cl_client_cli.admin.user.update.common.get_session_manager")
-def test_user_update(mock_get_session, mandatory_args):
+def test_user_update(mock_get_session):
     """Test admin user update command."""
     mock_user = UserResponse(
         id=1,
@@ -101,13 +101,13 @@ def test_user_update(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "user", "update", "1", "--admin"]
+        ["admin", "user", "update", "1", "--admin"]
     )
 
     assert result.exit_code == 0
 
 @patch("cl_client_cli.admin.user.delete.common.get_session_manager")
-def test_user_delete(mock_get_session, mandatory_args):
+def test_user_delete(mock_get_session):
     """Test admin user delete command."""
     mock_user = UserResponse(
         id=1,
@@ -127,7 +127,7 @@ def test_user_delete(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "user", "delete", "1", "--yes"]
+        ["admin", "user", "delete", "1", "--yes"]
     )
 
     assert result.exit_code == 0

@@ -7,7 +7,7 @@ from cl_client.store_models import StoreOperationResult
 from cl_client.intelligence_models import EntityIntelligenceData
 from cl_client_cli.main import cli
 
-def test_store_intelligence_success(mock_store_manager, sample_entity_intelligence: EntityIntelligenceData, mandatory_args):
+def test_store_intelligence_success(mock_store_manager, sample_entity_intelligence: EntityIntelligenceData):
     """Test store intelligence command."""
     mock_store_manager.get_entity_intelligence.return_value = StoreOperationResult(
         success="Intelligence data retrieved successfully",
@@ -15,7 +15,7 @@ def test_store_intelligence_success(mock_store_manager, sample_entity_intelligen
     )
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["store", "intelligence", "1"])
+    result = runner.invoke(cli, ["store", "intelligence", "1"])
 
     assert result.exit_code == 0
     data = json.loads(result.output)

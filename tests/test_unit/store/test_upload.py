@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 
 
-def test_upload_single_file_success(mock_store_manager, temp_image_file, mandatory_args):
+def test_upload_single_file_success(mock_store_manager, temp_image_file):
     """Test uploading a single file successfully."""
     # Mock the entity creation
     mock_entity = MagicMock()
@@ -24,7 +24,7 @@ def test_upload_single_file_success(mock_store_manager, temp_image_file, mandato
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["store", "upload", str(temp_image_file), "--label", "Test Image"]
+        ["store", "upload", str(temp_image_file), "--label", "Test Image"]
     )
 
     assert result.exit_code == 0
@@ -34,7 +34,7 @@ def test_upload_single_file_success(mock_store_manager, temp_image_file, mandato
     assert call_kwargs["is_collection"] is False
 
 
-def test_upload_single_file_with_parent(mock_store_manager, temp_image_file, mandatory_args):
+def test_upload_single_file_with_parent(mock_store_manager, temp_image_file):
     """Test uploading a single file with parent_id."""
     mock_entity = MagicMock()
     mock_entity.id = 1
@@ -50,7 +50,7 @@ def test_upload_single_file_with_parent(mock_store_manager, temp_image_file, man
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["store", "upload", str(temp_image_file), "--parent-id", "5"]
+        ["store", "upload", str(temp_image_file), "--parent-id", "5"]
     )
 
     assert result.exit_code == 0
@@ -58,14 +58,14 @@ def test_upload_single_file_with_parent(mock_store_manager, temp_image_file, man
     assert call_kwargs["parent_id"] == 5
 
 
-def test_upload_directory_without_recursive(mock_store_manager, mandatory_args):
+def test_upload_directory_without_recursive(mock_store_manager):
     """Test uploading a directory without --recursive flag should fail."""
     runner = CliRunner()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         result = runner.invoke(
             cli,
-            mandatory_args + ["store", "upload", tmpdir]
+            ["store", "upload", tmpdir]
         )
 
         # Should error because directory needs --recursive
@@ -73,7 +73,7 @@ def test_upload_directory_without_recursive(mock_store_manager, mandatory_args):
         assert "recursive" in result.output.lower() or "directory" in result.output.lower()
 
 
-def test_upload_directory_recursive_success(mock_store_manager, mandatory_args):
+def test_upload_directory_recursive_success(mock_store_manager):
     """Test uploading a directory with --recursive and --yes flags."""
     # Create temporary directory with test images
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -99,7 +99,7 @@ def test_upload_directory_recursive_success(mock_store_manager, mandatory_args):
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            mandatory_args + ["store", "upload", tmpdir, "--recursive", "--yes"]
+            ["store", "upload", tmpdir, "--recursive", "--yes"]
         )
 
         assert result.exit_code == 0
@@ -107,7 +107,7 @@ def test_upload_directory_recursive_success(mock_store_manager, mandatory_args):
         assert mock_store_manager.create_entity.call_count == 2
 
 
-def test_upload_directory_recursive_with_subdirs(mock_store_manager, mandatory_args):
+def test_upload_directory_recursive_with_subdirs(mock_store_manager):
     """Test uploading a directory recursively includes subdirectories."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmppath = Path(tmpdir)
@@ -134,7 +134,7 @@ def test_upload_directory_recursive_with_subdirs(mock_store_manager, mandatory_a
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            mandatory_args + ["store", "upload", tmpdir, "--recursive", "--yes"]
+            ["store", "upload", tmpdir, "--recursive", "--yes"]
         )
 
         assert result.exit_code == 0
@@ -142,13 +142,13 @@ def test_upload_directory_recursive_with_subdirs(mock_store_manager, mandatory_a
         assert mock_store_manager.create_entity.call_count == 2
 
 
-def test_upload_directory_empty(mock_store_manager, mandatory_args):
+def test_upload_directory_empty(mock_store_manager):
     """Test uploading an empty directory should fail."""
     with tempfile.TemporaryDirectory() as tmpdir:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            mandatory_args + ["store", "upload", tmpdir, "--recursive", "--yes"]
+            ["store", "upload", tmpdir, "--recursive", "--yes"]
         )
 
         # Should error because no images found

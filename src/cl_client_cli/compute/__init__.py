@@ -4,9 +4,18 @@ from .utils import get_compute_client
 from .job_tracker import JobProgressTracker
 
 @click.group(cls=common.JSONGroup)
-def compute():
+@click.pass_context
+def compute(ctx: click.Context):
     """Compute operations (media processing plugins)."""
-    pass
+    # Load cached config before any compute command runs
+    context = common.load_cached_config_or_exit(ctx)
+
+    # Apply JSON override from root CLI if present
+    if ctx.parent and ctx.parent.obj and 'json_override' in ctx.parent.obj:
+        if ctx.parent.obj['json_override']:
+            context.config.output_json = True
+
+    ctx.obj = context
 
 __all__ = ["compute", "get_compute_client", "JobProgressTracker"]
 

@@ -679,6 +679,68 @@ def mock_config(request):
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def setup_cached_config(request):
+    """Setup cached config for all tests.
+
+    For unit tests: Creates a mocked cache with test credentials
+    For integration tests: Creates a mocked cache with real server URLs from CLI options
+    """
+    # Skip for test_cached_config.py - those tests handle their own Path.home patching
+    if 'test_cached_config' in request.node.nodeid:
+        yield
+        return
+
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    # Create temp directory for cache
+    tmpdir = tempfile.mkdtemp()
+    cache_path = Path(tmpdir) / ".cl_client_cache"
+
+    # Get fixture values only if we need them
+    auth_url = request.getfixturevalue('auth_url')
+    compute_url = request.getfixturevalue('compute_url')
+    store_url = request.getfixturevalue('store_url')
+    mqtt_url = request.getfixturevalue('mqtt_url')
+    username = request.getfixturevalue('username')
+    password = request.getfixturevalue('password')
+
+    # Create test config with URLs from fixtures
+    from cl_client_cli.common.config import CLIConfig
+    from cl_client import ServerPref
+
+    test_config = CLIConfig(
+        server_pref=ServerPref(
+            auth_url=auth_url,
+            compute_url=compute_url,
+            store_url=store_url,
+            mqtt_url=mqtt_url
+        ),
+        username=username or "admin",
+        password=password or "admin",
+        no_auth=False,
+        output_json=False
+    )
+
+    # Patch Path.home for the duration of the test
+    with patch("cl_client_cli.common.cached_config.Path.home", return_value=Path(tmpdir)) as mock_home:
+        # Save config to cache (will use mocked home)
+        from cl_client_cli.common import save_config_to_cache
+        save_config_to_cache(test_config)
+
+        # Yield with patch still active
+        yield
+
+        # Cleanup
+        if cache_path.exists():
+            try:
+                cache_path.unlink()
+            except Exception:
+                pass
+
+
 @pytest.fixture
 def mock_compute_client():
     """Create a mock ComputeClient for CLI testing."""

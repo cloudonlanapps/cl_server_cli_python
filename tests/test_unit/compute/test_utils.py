@@ -126,20 +126,16 @@ async def test_get_compute_client_with_credentials_success():
     mock_session.create_compute_client = MagicMock(return_value=mock_compute_client)
 
     with patch("cl_client_cli.compute.utils.SessionManager", return_value=mock_session):
-        with patch("cl_client_cli.compute.utils.save_password_to_cache") as mock_save:
-            client = await get_compute_client(ctx)
+        client = await get_compute_client(ctx)
 
-            # Verify login was called
-            mock_session.login.assert_called_once_with("testuser", "testpass")
+        # Verify login was called
+        mock_session.login.assert_called_once_with("testuser", "testpass")
 
-            # Verify password was cached
-            mock_save.assert_called_once_with("testuser", "testpass")
+        # Verify session stored in context
+        assert context.session == mock_session
 
-            # Verify session stored in context
-            assert context.session == mock_session
-
-            # Verify client returned
-            assert client == mock_compute_client
+        # Verify client returned
+        assert client == mock_compute_client
 
 
 @pytest.mark.asyncio
@@ -166,18 +162,14 @@ async def test_get_compute_client_with_credentials_auth_failure():
     mock_session.close = AsyncMock()
 
     with patch("cl_client_cli.compute.utils.SessionManager", return_value=mock_session):
-        with patch("cl_client_cli.compute.utils.clear_password_cache") as mock_clear:
-            with patch("cl_client_cli.compute.utils.output_error") as mock_error:
-                await get_compute_client(ctx)
+        with patch("cl_client_cli.compute.utils.output_error") as mock_error:
+            await get_compute_client(ctx)
 
-                # Verify session was closed
-                mock_session.close.assert_called_once()
+            # Verify session was closed
+            mock_session.close.assert_called_once()
 
-                # Verify cache was cleared
-                mock_clear.assert_called_once()
-
-                # Verify error was output
-                mock_error.assert_called_once()
-                assert "Authentication failed" in str(mock_error.call_args[0][1])
+            # Verify error was output
+            mock_error.assert_called_once()
+            assert "Authentication failed" in str(mock_error.call_args[0][1])
 
 

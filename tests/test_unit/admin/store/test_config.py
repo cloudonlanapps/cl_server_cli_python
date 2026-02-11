@@ -6,7 +6,7 @@ from click.testing import CliRunner
 from cl_client.store_models import StoreOperationResult
 from cl_client_cli.main import cli
 
-def test_store_admin_config(mock_store_manager, sample_store_pref, mandatory_args):
+def test_store_admin_config(mock_store_manager, sample_store_pref):
     """Test store admin config command."""
     mock_store_manager.get_pref.return_value = StoreOperationResult(
         success="Configuration retrieved successfully",
@@ -14,7 +14,7 @@ def test_store_admin_config(mock_store_manager, sample_store_pref, mandatory_arg
     )
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["admin", "store", "config"])
+    result = runner.invoke(cli, ["admin", "store", "config"])
 
     assert result.exit_code == 0
     # Parse JSON output and verify config data

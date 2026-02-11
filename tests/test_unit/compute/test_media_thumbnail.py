@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.models import JobResponse
 from cl_client_cli.main import cli
 
-def test_generate_polling_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_generate_polling_mode(mock_compute_client, temp_image_file):
     """Test media-thumbnail generate in polling mode."""
     # Configure mock
     job = JobResponse(
@@ -26,7 +26,7 @@ def test_generate_polling_mode(mock_compute_client, temp_image_file, mandatory_a
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["compute", "media-thumbnail", "generate", str(temp_image_file), "--width", "256", "--height", "256"],
+        ["compute", "media-thumbnail", "generate", str(temp_image_file), "--width", "256", "--height", "256"],
     )
 
     # Verify
@@ -34,7 +34,7 @@ def test_generate_polling_mode(mock_compute_client, temp_image_file, mandatory_a
     assert "test-job-stu" in result.output
     mock_compute_client.media_thumbnail.generate.assert_called_once()
 
-def test_generate_with_size(mock_compute_client, temp_image_file, mandatory_args):
+def test_generate_with_size(mock_compute_client, temp_image_file):
     """Test media-thumbnail generate with size parameters."""
     # Configure mock
     job = JobResponse(
@@ -55,7 +55,7 @@ def test_generate_with_size(mock_compute_client, temp_image_file, mandatory_args
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + [
+        [
             "compute",
             "media-thumbnail",
             "generate",
@@ -74,7 +74,7 @@ def test_generate_with_size(mock_compute_client, temp_image_file, mandatory_args
     assert call_kwargs["width"] == 256
     assert call_kwargs["height"] == 256
 
-def test_media_thumbnail_watch_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_media_thumbnail_watch_mode(mock_compute_client, temp_image_file):
     """Test media-thumbnail generate with watch mode."""
     job = JobResponse(
         job_id="test-job-thumb-watch",
@@ -99,7 +99,7 @@ def test_media_thumbnail_watch_mode(mock_compute_client, temp_image_file, mandat
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + [
+        [
             "compute",
             "media-thumbnail",
             "generate",

@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.models import JobResponse
 from cl_client_cli.main import cli
 
-def test_failed_job(mock_compute_client, temp_image_file, mandatory_args):
+def test_failed_job(mock_compute_client, temp_image_file):
     """Test handling of failed jobs."""
     # Configure mock to return failed job
     failed_job = JobResponse(
@@ -24,19 +24,19 @@ def test_failed_job(mock_compute_client, temp_image_file, mandatory_args):
 
     # Run command
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["compute", "clip-embedding", "embed", str(temp_image_file)])
+    result = runner.invoke(cli, ["compute", "clip-embedding", "embed", str(temp_image_file)])
 
     # Should show error but may exit 0 (depends on implementation)
     assert "failed" in result.output.lower() or "error" in result.output.lower()
 
-def test_timeout_parameter(mock_compute_client, temp_image_file, completed_job, mandatory_args):
+def test_timeout_parameter(mock_compute_client, temp_image_file, completed_job):
     """Test timeout parameter is passed correctly."""
     mock_compute_client.clip_embedding.embed_image = AsyncMock(return_value=completed_job)
 
     # Run command with custom timeout
     runner = CliRunner()
     result = runner.invoke(
-        cli, mandatory_args + ["compute", "clip-embedding", "embed", "--timeout", "120", str(temp_image_file)]
+        cli, ["compute", "clip-embedding", "embed", "--timeout", "120", str(temp_image_file)]
     )
 
     # Verify timeout was passed

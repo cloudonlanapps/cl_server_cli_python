@@ -26,15 +26,13 @@ class TestUserManagementCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test user create command with JSON output."""
         username = f"test_user_create_{uuid.uuid4().hex[:8]}"
         # Execute CLI command to create a user
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -53,14 +51,12 @@ class TestUserManagementCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test user list command with JSON output."""
         # Execute CLI command to list users
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "list",
@@ -77,15 +73,13 @@ class TestUserManagementCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test user get command with JSON output."""
         username = f"test_user_get_{uuid.uuid4().hex[:8]}"
         # First create a user to get
         create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -102,8 +96,7 @@ class TestUserManagementCLI:
         # Test get command
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "get",
@@ -121,15 +114,13 @@ class TestUserManagementCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test user update command with JSON output."""
         username = f"test_user_update_{uuid.uuid4().hex[:8]}"
         # First create a user to update
         create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -146,8 +137,7 @@ class TestUserManagementCLI:
         # Test update command
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "update",
@@ -165,15 +155,13 @@ class TestUserManagementCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test user delete command with JSON output."""
         username = f"test_user_delete_{uuid.uuid4().hex[:8]}"
         # First create a user to delete
         create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -190,8 +178,7 @@ class TestUserManagementCLI:
         # Test delete command
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "delete",
@@ -208,15 +195,13 @@ class TestUserManagementCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test user permissions list command with JSON output."""
         username = f"test_user_perms_{uuid.uuid4().hex[:8]}"
         # First create a user
         create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -233,8 +218,7 @@ class TestUserManagementCLI:
         # Test permissions list command
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "get",  # user permissions list doesn't exist, it's just user get
@@ -252,15 +236,13 @@ class TestUserManagementCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test user permissions update command with JSON output."""
         username = f"test_user_perms_upd_{uuid.uuid4().hex[:8]}"
         # First create a user
         create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -277,8 +259,7 @@ class TestUserManagementCLI:
         # Test update permissions
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "update",
@@ -298,15 +279,13 @@ class TestUserManagementCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test user permissions removal via update with JSON output."""
         username = f"test_user_rem_perm_{uuid.uuid4().hex[:8]}"
         # First create a user
         create_result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "create",
@@ -326,8 +305,7 @@ class TestUserManagementCLI:
         # Test remove permission command (by updating with empty permissions)
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "admin", "user",
                 "update",

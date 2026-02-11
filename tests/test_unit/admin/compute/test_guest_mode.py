@@ -6,7 +6,7 @@ from cl_client_cli.main import cli
 
 
 @patch("cl_client_cli.admin.compute.guest_mode.common.get_session_manager")
-def test_guest_mode_get_enabled(mock_get_session, mandatory_args):
+def test_guest_mode_get_enabled(mock_get_session):
     """Test getting guest mode when enabled."""
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
@@ -18,7 +18,7 @@ def test_guest_mode_get_enabled(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "compute", "guest-mode", "get"]
+        ["admin", "compute", "guest-mode", "get"]
     )
 
     assert result.exit_code == 0
@@ -27,7 +27,7 @@ def test_guest_mode_get_enabled(mock_get_session, mandatory_args):
 
 
 @patch("cl_client_cli.admin.compute.guest_mode.common.get_session_manager")
-def test_guest_mode_get_disabled(mock_get_session, mandatory_args):
+def test_guest_mode_get_disabled(mock_get_session):
     """Test getting guest mode when disabled."""
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
@@ -39,7 +39,7 @@ def test_guest_mode_get_disabled(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "compute", "guest-mode", "get"]
+        ["admin", "compute", "guest-mode", "get"]
     )
 
     assert result.exit_code == 0
@@ -47,7 +47,7 @@ def test_guest_mode_get_disabled(mock_get_session, mandatory_args):
 
 
 @patch("cl_client_cli.admin.compute.guest_mode.common.get_session_manager")
-def test_guest_mode_set_enable(mock_get_session, mandatory_args):
+def test_guest_mode_set_enable(mock_get_session):
     """Test enabling guest mode."""
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
@@ -59,7 +59,7 @@ def test_guest_mode_set_enable(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "compute", "guest-mode", "set", "true"]
+        ["admin", "compute", "guest-mode", "set", "true"]
     )
 
     assert result.exit_code == 0
@@ -67,7 +67,7 @@ def test_guest_mode_set_enable(mock_get_session, mandatory_args):
 
 
 @patch("cl_client_cli.admin.compute.guest_mode.common.get_session_manager")
-def test_guest_mode_set_disable(mock_get_session, mandatory_args):
+def test_guest_mode_set_disable(mock_get_session):
     """Test disabling guest mode."""
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
@@ -79,7 +79,7 @@ def test_guest_mode_set_disable(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "compute", "guest-mode", "set", "false"]
+        ["admin", "compute", "guest-mode", "set", "false"]
     )
 
     assert result.exit_code == 0
@@ -87,7 +87,7 @@ def test_guest_mode_set_disable(mock_get_session, mandatory_args):
 
 
 @patch("cl_client_cli.admin.compute.guest_mode.common.get_session_manager")
-def test_guest_mode_get_error(mock_get_session, mandatory_args):
+def test_guest_mode_get_error(mock_get_session):
     """Test guest mode get with error."""
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
@@ -99,7 +99,7 @@ def test_guest_mode_get_error(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "compute", "guest-mode", "get"]
+        ["admin", "compute", "guest-mode", "get"]
     )
 
     assert result.exit_code != 0
@@ -107,7 +107,7 @@ def test_guest_mode_get_error(mock_get_session, mandatory_args):
 
 
 @patch("cl_client_cli.admin.compute.guest_mode.common.get_session_manager")
-def test_guest_mode_set_error(mock_get_session, mandatory_args):
+def test_guest_mode_set_error(mock_get_session):
     """Test guest mode set with error."""
     mock_session = AsyncMock()
     mock_session.close = AsyncMock()
@@ -119,7 +119,7 @@ def test_guest_mode_set_error(mock_get_session, mandatory_args):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["--username", "admin", "--password", "admin", "admin", "compute", "guest-mode", "set", "true"]
+        ["admin", "compute", "guest-mode", "set", "true"]
     )
 
     assert result.exit_code != 0

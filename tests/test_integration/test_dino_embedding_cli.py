@@ -27,14 +27,12 @@ class TestDinoEmbeddingCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test dino-embedding embed with HTTP polling and JSON output."""
         # Execute CLI command with JSON output (uses wait=True by default)
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "compute", "dino-embedding",
                 "embed",
@@ -53,14 +51,12 @@ class TestDinoEmbeddingCLI:
         cli_runner: CliRunner,
         cli_env: dict[str, str],
         test_image: Path,
-        mandatory_args: list[str],
     ):
         """Test dino-embedding embed with MQTT callbacks (--watch flag) and JSON output."""
         # Execute CLI command with --watch for MQTT updates and JSON output
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "compute", "dino-embedding",
                 "embed",
@@ -81,7 +77,6 @@ class TestDinoEmbeddingCLI:
         cli_env: dict[str, str],
         test_image: Path,
         tmp_path: Path,
-        mandatory_args: list[str],
     ):
         """Test dino-embedding embed with output file download and JSON output."""
         output_file = tmp_path / "dino_embedding.npy"
@@ -89,8 +84,7 @@ class TestDinoEmbeddingCLI:
         # Execute CLI command with -o flag to download embedding and JSON output
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "compute", "dino-embedding",
                 "embed",
@@ -113,14 +107,12 @@ class TestDinoEmbeddingCLI:
         self,
         cli_runner: CliRunner,
         cli_env: dict[str, str],
-        mandatory_args: list[str],
     ):
         """Test dino-embedding embed with missing file returns JSON error."""
         # Execute CLI command with non-existent file and JSON output
         result = cli_runner.invoke(
             cli,
-            mandatory_args
-            + [
+            [
                 "--json",
                 "compute", "dino-embedding",
                 "embed",

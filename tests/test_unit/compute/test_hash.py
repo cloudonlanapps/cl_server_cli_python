@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.models import JobResponse
 from cl_client_cli.main import cli
 
-def test_compute_polling_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_compute_polling_mode(mock_compute_client, temp_image_file):
     """Test hash compute in polling mode."""
     # Configure mock
     job = JobResponse(
@@ -27,7 +27,7 @@ def test_compute_polling_mode(mock_compute_client, temp_image_file, mandatory_ar
 
     # Run command
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["compute", "hash", "compute", str(temp_image_file)])
+    result = runner.invoke(cli, ["compute", "hash", "compute", str(temp_image_file)])
 
     # Verify
     assert result.exit_code == 0
@@ -35,7 +35,7 @@ def test_compute_polling_mode(mock_compute_client, temp_image_file, mandatory_ar
     assert "fedcba0987654321" in result.output
     mock_compute_client.hash.compute.assert_called_once()
 
-def test_hash_watch_mode(mock_compute_client, temp_image_file, mandatory_args):
+def test_hash_watch_mode(mock_compute_client, temp_image_file):
     """Test hash compute with watch mode."""
     job = JobResponse(
         job_id="test-job-hash-watch",
@@ -58,7 +58,7 @@ def test_hash_watch_mode(mock_compute_client, temp_image_file, mandatory_args):
     mock_compute_client.hash.compute = AsyncMock(side_effect=mock_compute)
 
     runner = CliRunner()
-    result = runner.invoke(cli, mandatory_args + ["compute", "hash", "compute", "--watch", str(temp_image_file)])
+    result = runner.invoke(cli, ["compute", "hash", "compute", "--watch", str(temp_image_file)])
 
     assert result.exit_code == 0
     mock_compute_client.hash.compute.assert_called_once()

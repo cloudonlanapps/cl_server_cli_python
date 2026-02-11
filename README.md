@@ -44,59 +44,78 @@ uv run cl-client --help
 
 ## Quick Start
 
-The CLI now requires server URLs to be provided either via command-line flags or environment variables.
+The CLI uses a login-once approach. Login with your credentials once, then use all commands without repeating credentials.
 
 ### Basic Usage
 
-**With command-line flags:**
+**Login first (one-time):**
 ```bash
-# Submit job and wait for completion
-uv run cl-client \
+# Login with all configuration
+uv run cl-client login \
+  --username admin \
+  --password mypass \
   --auth-url http://localhost:8010 \
   --compute-url http://localhost:8012 \
   --store-url http://localhost:8011 \
-  --mqtt-url mqtt://localhost:1883 \
-  compute clip-embedding embed photo.jpg
+  --mqtt-url mqtt://localhost:1883
+
+# Or use short flags
+uv run cl-client login -u admin -p mypass \
+  --auth-url http://localhost:8010 \
+  --compute-url http://localhost:8012 \
+  --store-url http://localhost:8011 \
+  --mqtt-url http://localhost:1883
+```
+
+**Then use commands (no credentials needed):**
+```bash
+# All commands use cached configuration
+uv run cl-client store list
+uv run cl-client compute clip-embedding embed photo.jpg
+uv run cl-client admin user list
 ```
 
 **With config file (recommended):**
 ```bash
-# One-time setup
-echo "[cl_client]
-auth_url = http://localhost:8010
-compute_url = http://localhost:8012
-store_url = http://localhost:8011
-mqtt_url = mqtt://localhost:1883
-username = admin" > ~/.cl_client_config.ini
+# One-time setup: create config file
+echo '{"server_pref": {
+  "auth_url": "http://localhost:8010",
+  "compute_url": "http://localhost:8012",
+  "store_url": "http://localhost:8011",
+  "mqtt_url": "mqtt://localhost:1883"
+}}' > ~/.cl_client_config.json
 
-# Method 1: Use login command (recommended)
-uv run cl-client admin login          # Uses username from config, prompts for password
-# Or: uv run cl-client admin login -u admin -p mypass
-uv run cl-client store list           # No credentials needed (uses cache)
+# Login once (URLs loaded from config, prompt for credentials)
+uv run cl-client login
+Username: admin
+Password: ****
+
+# Use commands without repeating credentials
+uv run cl-client store list
 uv run cl-client compute clip-embedding embed photo.jpg
-
-# Method 2: First command caches password
-uv run cl-client --password mypass store list  # First time (caches password)
-uv run cl-client store list                    # Subsequent (uses cache)
 ```
 
 ### Using Configuration File (Recommended)
 
 ```bash
-# Set up config file once
-cat > ~/.cl_client_config.ini <<EOF
-[cl_client]
-auth_url = http://localhost:8010
-compute_url = http://localhost:8012
-store_url = http://localhost:8011
-mqtt_url = mqtt://localhost:1883
-username = admin
+# Set up config file once (JSON format)
+cat > ~/.cl_client_config.json <<EOF
+{
+  "server_pref": {
+    "auth_url": "http://localhost:8010",
+    "compute_url": "http://localhost:8012",
+    "store_url": "http://localhost:8011",
+    "mqtt_url": "mqtt://localhost:1883"
+  }
+}
 EOF
 
-# First login (caches password)
-uv run cl-client --password mypass store list
+# Login once (reads URLs from config, prompts for credentials)
+uv run cl-client login
+Username: admin
+Password: ****
 
-# Subsequent commands use config + cached password
+# All subsequent commands use cached config
 uv run cl-client store list
 uv run cl-client compute clip-embedding embed photo.jpg
 ```
@@ -105,38 +124,45 @@ uv run cl-client compute clip-embedding embed photo.jpg
 
 All commands are now organized into logical groups:
 
-### 1. Admin Commands
+### Session Management
 
-#### Session Management
-
-**Login**
+**Login** (root-level command)
 ```bash
-# Login with explicit credentials
-uv run cl-client admin login --username admin --password mypass
-uv run cl-client admin login -u admin -p mypass
+# Login with all credentials and URLs
+uv run cl-client login --username admin --password mypass \
+  --auth-url http://localhost:8010 \
+  --compute-url http://localhost:8012 \
+  --store-url http://localhost:8011 \
+  --mqtt-url mqtt://localhost:1883
 
-# Login using username from config file, prompt for password
-uv run cl-client admin login
+# Short form
+uv run cl-client login -u admin -p mypass \
+  --auth-url http://localhost:8010 \
+  --compute-url http://localhost:8012 \
+  --store-url http://localhost:8011
+
+# Login using URLs from config file, prompt for credentials
+uv run cl-client login
+Username: admin
 Password: ****
-
-# Login with username from config, explicit password
-uv run cl-client admin login --password mypass
 
 # Login with explicit username, prompt for password
-uv run cl-client admin login -u admin
+uv run cl-client login -u admin
 Password: ****
 
-# After login, subsequent commands don't need credentials (cached for 6 hours)
+# After login, all commands use cached config (expires after 6 hours)
 uv run cl-client admin user list
 uv run cl-client store list
 uv run cl-client compute clip-embedding embed photo.jpg
 ```
 
-**Logout**
+**Logout** (root-level command)
 ```bash
-# Clear cached credentials
-uv run cl-client admin logout
+# Clear cached configuration and credentials
+uv run cl-client logout
 ```
+
+### 1. Admin Commands
 
 #### Permissions Management
 
@@ -355,105 +381,94 @@ uv run cl-client compute hls-streaming generate-manifest video.mp4
 uv run cl-client compute hls-streaming generate-manifest video.mp4 --segment-duration 10
 ```
 
-### 5. Utility Commands
+### 5. Session Commands
 
-#### Clear Password Cache
+**Login** (see Session Management section above)
+
+**Logout**
 ```bash
-uv run cl-client clear-cache
+# Clear cached configuration and credentials
+uv run cl-client logout
 ```
 
 ## Configuration
 
-The CLI supports three configuration methods with the following priority (highest to lowest):
-1. **Command-line flags** (e.g., `--auth-url`)
-2. **Environment variables** (e.g., `CL_AUTH_URL`)
-3. **Configuration file** (`~/.cl_client_config.ini`)
+The CLI uses a login-once approach with two configuration methods:
 
-### Configuration File (Recommended)
+1. **Login command** (accepts all parameters: --auth-url, --compute-url, etc.)
+2. **Configuration file** (`~/.cl_client_config.json` - optional, provides defaults for login)
 
-Create `~/.cl_client_config.ini` with your default settings:
+### Configuration File (Optional)
 
-```ini
-[cl_client]
-auth_url = http://localhost:8010
-compute_url = http://localhost:8012
-store_url = http://localhost:8011
-mqtt_url = mqtt://localhost:1883
-username = admin
-# Note: password NOT stored for security - see Password Caching below
+Create `~/.cl_client_config.json` to avoid specifying URLs every time you login:
+
+```json
+{
+  "server_pref": {
+    "auth_url": "http://localhost:8010",
+    "compute_url": "http://localhost:8012",
+    "store_url": "http://localhost:8011",
+    "mqtt_url": "mqtt://localhost:1883"
+  }
+}
 ```
 
-**Security Note**: Passwords are never stored in the config file. Use password caching (see below) for convenience.
+**Note**: Credentials are never stored in the config file. They're provided during login and cached securely.
 
-**Copy example config**:
-```bash
-cp .cl_client_config.ini.example ~/.cl_client_config.ini
-# Edit with your values
-```
+### Configuration Caching
 
-### Environment Variables
+After running `cl-client login`, your entire configuration is cached securely:
 
-| Variable | Description |
-|----------|-------------|
-| `CL_AUTH_URL` | Auth service URL (e.g., http://localhost:8010) |
-| `CL_COMPUTE_URL` | Compute service URL (e.g., http://localhost:8012) |
-| `CL_STORE_URL` | Store service URL (e.g., http://localhost:8011) |
-| `CL_MQTT_URL` | MQTT broker URL (e.g., mqtt://localhost:1883) |
-| `CL_USERNAME` | Default username for authentication |
-| `CL_PASSWORD` | Default password for authentication |
-
-### Password Caching
-
-For security and convenience, the CLI caches passwords after successful authentication:
-
-- **Encryption**: AES-256 symmetric encryption
+- **What's cached**: Full configuration (URLs, credentials, settings)
+- **Encryption**: Fernet symmetric encryption (AES-128)
 - **Expiration**: 6 hours
 - **Storage**: `~/.cl_client_cache` (permissions: 0o600)
-- **Machine-specific**: Encryption key derived from username + machine UUID
-- **Auto-clear**: Cache cleared automatically on authentication failure
+- **Machine-specific**: Encryption key derived from machine UUID
+- **Auto-clear**: Cache cleared automatically on expiration or auth failure
 
-**First login** (password cached):
+**First login** (configuration cached):
 ```bash
-cl-client --username admin --password mypass store list
-# Using cached password  # Shown on subsequent commands
+cl-client login -u admin -p mypass --auth-url http://localhost:8010 --compute-url http://localhost:8012
+✓ Logged in as admin
+  Config cached at ~/.cl_client_cache
 ```
 
-**Subsequent commands** (uses cache):
+**Subsequent commands** (use cached config):
 ```bash
-cl-client store list  # No password needed - uses cached password
+cl-client store list  # No credentials needed - uses cached config
+cl-client compute clip-embedding embed photo.jpg
 ```
 
 **Clear cache manually**:
 ```bash
-cl-client clear-cache
+cl-client logout
+✓ Logged out successfully
+  Cached config cleared
 ```
 
-### Global Options
+### Login Command Options
 
-All commands support these global flags:
+The `login` command accepts these options to configure your session:
 
-- `--auth-url`: Auth service URL (overrides config file and env var)
-- `--compute-url`: Compute service URL (overrides config file and env var)
-- `--store-url`: Store service URL (overrides config file and env var)
-- `--mqtt-url`: MQTT broker URL (overrides config file and env var)
-- `--username`: Username for authenticated commands (overrides config file and env var)
-- `--password`: Password for authenticated commands (cached after successful login)
-- `--no-auth`: Disable authentication (if supported by server)
-- `--json`: Output results in JSON format (**IMPORTANT**: Must be placed BEFORE the command, e.g., `cl-client --json admin user list`)
-- `--timeout SECONDS`: Maximum wait time for job completion (default: 30.0)
-- `--watch, -w`: Enable real-time MQTT progress tracking
-- `--output, -o FILE`: Automatically download result to specified file
+- `--username, -u`: Username for authentication
+- `--password, -p`: Password for authentication
+- `--auth-url`: Auth service URL
+- `--compute-url`: Compute service URL
+- `--store-url`: Store service URL
+- `--mqtt-url`: MQTT broker URL
+- `--no-auth`: Use no-auth/guest mode (no credentials needed)
+- `--json`: Output login result as JSON
 
-**Note on `--json` flag**: This is a global flag and must be placed immediately after `cl-client`:
-```bash
-# CORRECT
-cl-client --json admin user list
-cl-client --json store list
+**Note**: After login, all configuration is cached. You don't need to specify these options again until the cache expires (6 hours) or you logout.
 
-# WRONG (will not work)
-cl-client admin user list --json
-cl-client store list --json
-```
+### Command-Specific Options
+
+Individual commands support specific flags:
+
+- `--timeout SECONDS`: Maximum wait time for job completion (default: 30.0) - compute commands
+- `--watch, -w`: Enable real-time MQTT progress tracking - compute commands
+- `--output, -o FILE`: Automatically download result to specified file - compute commands
+- `--json`: Output results in JSON format - all commands
 
 ## Output Formats
 
@@ -629,49 +644,47 @@ uv run cl-client clip-embedding embed photo.jpg --watch
 
 ## Migration Guide
 
+### Latest Version (Login-Based Authentication)
+
+**Major Changes**:
+- **Login required**: Run `cl-client login` before using commands
+- **No global flags**: `--username`, `--password`, `--auth-url`, etc. no longer accepted at root level
+- **Config caching**: Entire configuration (not just password) cached after login
+- **Login/logout moved**: `admin login` → `login`, `admin logout` → `logout`
+
+| Old Usage | New Usage |
+|-----------|-----------|
+| `cl-client --username admin --password pass store list` | `cl-client login -u admin -p pass --auth-url ...`<br>`cl-client store list` |
+| `cl-client admin login` | `cl-client login` |
+| `cl-client admin logout` | `cl-client logout` |
+| `cl-client --auth-url http://... store list` | Login once with URLs, then `cl-client store list` |
+
+**Migration Steps**:
+1. Remove all global flags from your scripts (`--username`, `--password`, `--auth-url`, etc.)
+2. Run `cl-client login` once with all configuration
+3. Use commands without credentials (they use cached config)
+4. Optionally create `~/.cl_client_config.json` for login defaults
+
+### Previous Version (Command Groups)
+
 If you were using an older version with flat command structure, commands have been reorganized into logical groups:
 
 | Old Command | New Command |
 |-------------|-------------|
 | `user create john pass` | `admin user create john pass` |
-| `user create john pass --admin` | `admin user create john pass --admin` |
-| `user create john pass -p read:jobs` | `admin user create john pass -p read:jobs` |
 | `user list` | `admin user list` |
-| `user get 2` | `admin user get 2` |
-| `user update 2 --password newpass` | `admin user update 2 --password newpass` |
-| `user update 2 --admin -p read:jobs` | `admin user update 2 --admin -p read:jobs` |
-| `user delete 2` | `admin user delete 2` |
 | `store admin config` | `admin store config` |
-| `store admin set-guest-mode` | `admin store set-guest-mode` |
-| `store admin audit-report` | `admin store audit-report` |
-| `store admin clear-orphans` | `admin store clear-orphans` |
 | `compute admin capabilities` | `admin compute capabilities` |
 | `clip-embedding embed` | `compute clip-embedding embed` |
-| `dino-embedding embed` | `compute dino-embedding embed` |
-| `exif extract` | `compute exif extract` |
-| `hash compute` | `compute hash compute` |
-| `image-conversion convert` | `compute image-conversion convert` |
-| `media-thumbnail generate` | `compute media-thumbnail generate` |
-| `hls-streaming generate-manifest` | `compute hls-streaming generate-manifest` |
 | `store list` | `store list` (unchanged) |
 
-**New features**:
-- Configuration file support (`~/.cl_client_config.ini`)
-- Secure password caching (6-hour expiration)
-- Interactive password prompting (when username is in config but no cached password)
-- Login/logout commands (`admin login`, `admin logout`)
+**Features Added**:
+- Configuration file support (`~/.cl_client_config.json`)
+- Secure config caching with Fernet encryption (6-hour expiration)
+- Login/logout commands at root level
 - Permissions validation and list command (`admin permissions list`)
-- Get guest mode commands (`admin store get-guest-mode`, `admin compute get-guest-mode`)
-- Compute guest mode support (`admin compute set-guest-mode`)
-- Face detection and face embedding commands (`compute face-detection detect`, `compute face-embedding embed`)
 - Enhanced store upload with directory support (`store upload photos/ --recursive`)
-- `clear-cache` command
-- Consolidated admin commands under single `admin` group
-
-**Command improvements**:
-- `store create` → `store upload` (backward compatible, `create` still works)
-- Directory upload with recursive scanning for images
-- Batch upload confirmation dialogs
+- Face detection and embedding commands
 
 ## Integration with Library
 

@@ -5,7 +5,7 @@ from click.testing import CliRunner
 from cl_client.store_models import StoreOperationResult, Entity
 from cl_client_cli.main import cli
 
-def test_store_update_success(mock_store_manager, sample_entity, mandatory_args):
+def test_store_update_success(mock_store_manager, sample_entity):
     """Test store update command."""
     mock_store_manager.update_entity.return_value = StoreOperationResult[Entity](
         success="Entity updated successfully",
@@ -15,7 +15,7 @@ def test_store_update_success(mock_store_manager, sample_entity, mandatory_args)
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        mandatory_args + ["store", "update", "1", "--label", "Updated Label"],
+        ["store", "update", "1", "--label", "Updated Label"],
     )
 
     assert result.exit_code == 0

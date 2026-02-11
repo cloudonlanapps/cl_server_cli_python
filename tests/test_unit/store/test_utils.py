@@ -120,20 +120,16 @@ async def test_get_store_manager_with_credentials_success():
     mock_session.create_store_manager = MagicMock(return_value=mock_store_manager)
 
     with patch("cl_client_cli.store.utils.SessionManager", return_value=mock_session):
-        with patch("cl_client_cli.store.utils.save_password_to_cache") as mock_save:
-            manager = await get_store_manager(ctx)
+        manager = await get_store_manager(ctx)
 
-            # Verify login was called
-            mock_session.login.assert_called_once_with("testuser", "testpass")
+        # Verify login was called
+        mock_session.login.assert_called_once_with("testuser", "testpass")
 
-            # Verify password was cached
-            mock_save.assert_called_once_with("testuser", "testpass")
+        # Verify session stored in context
+        assert context.session == mock_session
 
-            # Verify session stored in context
-            assert context.session == mock_session
-
-            # Verify manager returned
-            assert manager == mock_store_manager
+        # Verify manager returned
+        assert manager == mock_store_manager
 
 
 @pytest.mark.asyncio
@@ -160,18 +156,14 @@ async def test_get_store_manager_with_credentials_auth_failure():
     mock_session.close = AsyncMock()
 
     with patch("cl_client_cli.store.utils.SessionManager", return_value=mock_session):
-        with patch("cl_client_cli.store.utils.clear_password_cache") as mock_clear:
-            with patch("cl_client_cli.store.utils.output_error") as mock_error:
-                await get_store_manager(ctx)
+        with patch("cl_client_cli.store.utils.output_error") as mock_error:
+            await get_store_manager(ctx)
 
-                # Verify session was closed
-                mock_session.close.assert_called_once()
+            # Verify session was closed
+            mock_session.close.assert_called_once()
 
-                # Verify cache was cleared
-                mock_clear.assert_called_once()
-
-                # Verify error was output
-                mock_error.assert_called_once()
-                assert "Authentication failed" in str(mock_error.call_args[0][1])
+            # Verify error was output
+            mock_error.assert_called_once()
+            assert "Authentication failed" in str(mock_error.call_args[0][1])
 
 
