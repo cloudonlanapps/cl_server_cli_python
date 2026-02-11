@@ -20,23 +20,26 @@ def admin_login(ctx: click.Context, username: str | None, password: str | None):
         cl-client admin login -u admin -p pass123
     """
     context: CLIContext = ctx.obj
-    # Merge context with explicit flags
+    # Merge context with explicit flags (update config directly)
     if username:
-        context.username = username
+        context.config.username = username
     if password:
-        context.password = password
+        context.config.password = password
 
     async def run():
         session = await common.get_session_manager(ctx)
         try:
             # get_session_manager already handles login and caching
+            # It might prompt for username if not present, so we should read back from config
+            current_username = context.config.username
+            
             if not common.should_use_json(ctx):
-                click.echo(f"Successfully logged in as {context.username}", err=True)
+                click.echo(f"Successfully logged in as {current_username}", err=True)
             
             # Simple success response for JSON
             common.output_sdk_result(
                 ctx, 
-                common.SuccessResponse(message=f"Logged in as {context.username}")
+                common.SuccessResponse(message=f"Logged in as {current_username}")
             )
         except Exception as e:
             common.output_error(ctx, str(e))

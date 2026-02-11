@@ -3,7 +3,6 @@ import os
 import click
 from rich.console import Console
 
-from cl_client import ServerPref
 from . import common
 from .common.config import load_config
 from .common.context import CLIContext
@@ -72,44 +71,28 @@ def cli(
     if output_json:
         common.console = Console(file=open(os.devnull, "w"))
 
-    # Load config file (CLIConfig Pydantic model)
-    config = load_config()
-
-    # Priority: CLI flags > config file
-    auth_url = auth_url or config.auth_url
-    compute_url = compute_url or config.compute_url
-    store_url = store_url or config.store_url
-    mqtt_url = mqtt_url or config.mqtt_url
-    username = username or config.username
-
-    # Try to load cached password if username provided but no password
-    if username and not password and not no_auth:
-        cached_password = common.load_password_from_cache(username)
-        if cached_password:
-            password = cached_password
-            if not output_json:
-                click.echo("Using cached password", err=True)
-
-    # Initialize CLIContext Pydantic model
-    context = CLIContext(
-        username=username,
-        password=password,
+    # Load config with CLI overrides (validates URLs)
+    config = load_config(
         auth_url=auth_url,
         compute_url=compute_url,
         store_url=store_url,
         mqtt_url=mqtt_url,
+        username=username,
+        password=password,
         no_auth=no_auth,
-        output_json=output_json,
+        output_json=output_json
     )
 
-    # Only create ServerPref if we have all URLs
-    if auth_url and compute_url and store_url and mqtt_url:
-        context.server_config = ServerPref(
-            auth_url=auth_url,
-            compute_url=compute_url,
-            store_url=store_url,
-            mqtt_url=mqtt_url,
-        )
+    # Try to load cached password if username provided but no password
+    if config.username and not config.password and not config.no_auth:
+        cached_password = common.load_password_from_cache(config.username)
+        if cached_password:
+            config.password = cached_password
+            if not config.output_json:
+                click.echo("Using cached password", err=True)
+
+    # Initialize CLIContext
+    context = CLIContext(config=config)
     
     # Set the structured context
     ctx.obj = context

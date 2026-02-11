@@ -7,46 +7,46 @@ from ..common.cached_password import save_password_to_cache, clear_password_cach
 async def get_store_manager(ctx: click.Context) -> StoreManager:
     """Get StoreManager based on CLI context (auth or guest mode)."""
     context: CLIContext = ctx.obj
-    username = context.username
-    password = context.password
-    no_auth = context.no_auth
-    server_config = context.server_config
-    output_json = context.output_json
+    config = context.config
 
-    if not server_config:
-        output_error(ctx, "Server configuration required.")
+    # Server config is validated by load_config, but check for safety/typing
+    if not config.server_pref.store_url:
+        output_error(ctx, "Server configuration required (store_url).")
 
     # If --no-auth flag explicitly set, use guest mode
-    if no_auth:
-        return StoreManager.guest(base_url=server_config.store_url)
+    if config.no_auth:
+        return StoreManager.guest(base_url=config.server_pref.store_url)
 
     # If username provided but no password, prompt for it
-    if username and not password:
-        if output_json:
+    if config.username and not config.password:
+        if config.output_json:
             # In JSON mode, fall back to guest mode silently
-            return StoreManager.guest(base_url=server_config.store_url)
+            return StoreManager.guest(base_url=config.server_pref.store_url)
         else:
             # Prompt for password interactively
             password = click.prompt("Password", hide_input=True, type=str)
-            context.password = password
+            config.password = password
 
     # If no credentials at all, use guest mode
-    if not (username and password):
-        return StoreManager.guest(base_url=server_config.store_url)
+    if not (config.username and config.password):
+        return StoreManager.guest(base_url=config.server_pref.store_url)
 
     # With credentials: create session, login, return store manager
-    session = SessionManager(server_pref=server_config)
+    server_pref = config.to_server_pref()
+    session = SessionManager(server_pref=server_pref)
     try:
-        await session.login(username, password)
+        assert config.username is not None, "Username required"
+        assert config.password is not None, "Password required"
+        
+        await session.login(config.username, config.password)
         # Cache password after successful authentication
-        if username and password:
-            save_password_to_cache(username, password)
+        save_password_to_cache(config.username, config.password)
         # Store session in context for cleanup
         context.session = session
         return session.create_store_manager()
     except Exception as e:
         await session.close()
         # Clear cache on auth failure
-        if username:
+        if config.username:
             clear_password_cache()
         output_error(ctx, f"Authentication failed: {e}")

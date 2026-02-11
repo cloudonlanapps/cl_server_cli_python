@@ -27,7 +27,7 @@ class JobProgressTracker:
         
         # Access context via Pydantic model
         context: CLIContext = ctx.obj
-        self.use_json = context.output_json
+        self.use_json = context.config.output_json
 
         if not self.use_json:
             self.progress = Progress(

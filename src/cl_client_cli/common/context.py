@@ -1,18 +1,14 @@
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
-from cl_client import ServerPref, SessionManager
+from cl_client import SessionManager
+from .config import CLIConfig
 
 class CLIContext(BaseModel):
-    """Context object for CL Client CLI."""
+    """Context object for CL Client CLI.
+    
+    Holds the runtime configuration and active session.
+    """
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    username: Optional[str] = None
-    password: Optional[str] = None
-    auth_url: Optional[str] = None
-    compute_url: Optional[str] = None
-    store_url: Optional[str] = None
-    mqtt_url: Optional[str] = None
-    no_auth: bool = False
-    output_json: bool = False
-    server_config: Optional[ServerPref] = None
+    config: CLIConfig
     session: Optional[SessionManager] = None

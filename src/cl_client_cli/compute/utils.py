@@ -7,55 +7,55 @@ from ..common.cached_password import save_password_to_cache, clear_password_cach
 async def get_compute_client(ctx: click.Context) -> ComputeClient:
     """Get ComputeClient based on CLI context (auth or no-auth mode)."""
     context: CLIContext = ctx.obj
-    username = context.username
-    password = context.password
-    no_auth = context.no_auth
-    server_config = context.server_config
-    output_json = context.output_json
+    config = context.config
 
-    if not server_config:
-        output_error(ctx, "Server configuration required.")
+    if not config.server_pref.compute_url:
+        output_error(ctx, "Server configuration required (compute_url).")
+
+    server_pref = config.to_server_pref()
 
     # If --no-auth flag explicitly set, use no-auth mode
-    if no_auth:
+    if config.no_auth:
         return ComputeClient(
-            base_url=server_config.compute_url,
-            server_pref=server_config,
+            base_url=config.server_pref.compute_url,
+            server_pref=server_pref,
         )
 
     # If username provided but no password, prompt for it
-    if username and not password:
-        if output_json:
+    if config.username and not config.password:
+        if config.output_json:
             # In JSON mode, fall back to no-auth silently
             return ComputeClient(
-                base_url=server_config.compute_url,
-                server_pref=server_config,
+                base_url=config.server_pref.compute_url,
+                server_pref=server_pref,
             )
         else:
             # Prompt for password interactively
             password = click.prompt("Password", hide_input=True, type=str)
-            context.password = password
+            config.password = password
 
     # If no credentials at all, use no-auth mode
-    if not (username and password):
+    if not (config.username and config.password):
         return ComputeClient(
-            base_url=server_config.compute_url,
-            server_pref=server_config,
+            base_url=config.server_pref.compute_url,
+            server_pref=server_pref,
         )
 
     # With credentials: create session, login, return client
-    session = SessionManager(server_pref=server_config)
+    session = SessionManager(server_pref=server_pref)
     try:
-        await session.login(username, password)
+        assert config.username is not None, "Username required"
+        assert config.password is not None, "Password required"
+        
+        await session.login(config.username, config.password)
         # Cache password after successful authentication
-        if username and password:
-            save_password_to_cache(username, password)
+        save_password_to_cache(config.username, config.password)
         # Store session in context for cleanup
         context.session = session
         return session.create_compute_client()
     except Exception as e:
         await session.close()
         # Clear cache on auth failure
-        if username:
+        if config.username:
             clear_password_cache()
         output_error(ctx, f"Authentication failed: {e}")

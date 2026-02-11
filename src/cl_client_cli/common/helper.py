@@ -69,35 +69,40 @@ from .cached_password import save_password_to_cache
 def should_use_json(ctx: click.Context) -> bool:
     """Check if JSON output is enabled."""
     context: CLIContext = ctx.obj
-    return context.output_json
+    return context.config.output_json
 
 async def get_session_manager(ctx: click.Context) -> SessionManager:
     """Get authenticated SessionManager for admin operations."""
     context: CLIContext = ctx.obj
-    username = context.username
-    password = context.password
-    server_config = context.server_config
-    output_json = context.output_json
-
-    if not (username and password):
-        if output_json:
+    config = context.config
+    
+    # Check credentials in config
+    if not (config.username and config.password):
+        if config.output_json:
             output_error(ctx, "Credentials required in config block for JSON mode")
         else:
-            username = username or click.prompt("Username", type=str)
-            password = password or click.prompt("Password", hide_input=True, type=str)
-            # Update context with prompted values
-            context.username = username
-            context.password = password
+            username = config.username or click.prompt("Username", type=str)
+            password = config.password or click.prompt("Password", hide_input=True, type=str)
+            # Update config with prompted values (in memory only)
+            config.username = username
+            config.password = password
 
-    if not server_config:
-        output_error(ctx, "Server configuration required.")
+    # Server config is now guaranteed by load_config validation
+    if not config.server_pref.auth_url:
+         output_error(ctx, "Server configuration required.")
 
-    session = SessionManager(server_pref=server_config)
+    # Convert CLIConfig to ServerPref
+    server_pref = config.to_server_pref()
+
+    session = SessionManager(server_pref=server_pref)
     try:
-        await session.login(username, password)
+        # We ensured credentials are set above
+        assert config.username is not None
+        assert config.password is not None
+        
+        await session.login(config.username, config.password)
         # Cache password after successful authentication
-        if username and password:
-            save_password_to_cache(username, password)
+        save_password_to_cache(config.username, config.password)
         # Store session in context for cleanup
         context.session = session
         return session
