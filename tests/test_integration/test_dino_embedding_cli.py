@@ -36,7 +36,7 @@ class TestDinoEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "dino-embedding",
+                "compute", "dino-embedding",
                 "embed",
                 str(test_image),
             ],
@@ -62,7 +62,7 @@ class TestDinoEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "dino-embedding",
+                "compute", "dino-embedding",
                 "embed",
                 "--watch",
                 str(test_image),
@@ -92,7 +92,7 @@ class TestDinoEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "dino-embedding",
+                "compute", "dino-embedding",
                 "embed",
                 str(test_image),
                 "--output",
@@ -122,7 +122,7 @@ class TestDinoEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "dino-embedding",
+                "compute", "dino-embedding",
                 "embed",
                 "/nonexistent/file.jpg",
             ],

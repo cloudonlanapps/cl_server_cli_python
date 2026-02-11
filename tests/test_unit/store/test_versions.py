@@ -18,4 +18,4 @@ def test_store_versions_success(mock_store_manager, sample_versions, mandatory_a
     assert result.exit_code == 0
     assert "Version 1" in result.output
     assert "Version 2" in result.output
-    mock_store_manager.get_versions.assert_called_once_with(entity_id=1)
+    mock_store_manager.get_versions.assert_called_once_with(1)

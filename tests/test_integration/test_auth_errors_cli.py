@@ -152,7 +152,7 @@ class TestAuthErrorsCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",
@@ -199,7 +199,7 @@ class TestAuthErrorsCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",

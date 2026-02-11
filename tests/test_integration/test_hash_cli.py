@@ -36,7 +36,7 @@ class TestHashCLI:
             mandatory_args
             + [
                 "--json",
-                "hash",
+                "compute", "hash",
                 "compute",
                 str(test_image),
             ],
@@ -62,7 +62,7 @@ class TestHashCLI:
             mandatory_args
             + [
                 "--json",
-                "hash",
+                "compute", "hash",
                 "compute",
                 "--watch",
                 str(test_image),
@@ -92,7 +92,7 @@ class TestHashCLI:
             mandatory_args
             + [
                 "--json",
-                "hash",
+                "compute", "hash",
                 "compute",
                 str(test_image),
                 "--output",
@@ -122,7 +122,7 @@ class TestHashCLI:
             mandatory_args
             + [
                 "--json",
-                "hash",
+                "compute", "hash",
                 "compute",
                 "/nonexistent/file.jpg",
             ],

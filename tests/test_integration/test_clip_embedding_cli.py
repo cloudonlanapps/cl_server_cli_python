@@ -36,7 +36,7 @@ class TestClipEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "clip-embedding",
+                "compute", "clip-embedding",
                 "embed",
                 str(test_image),
             ],
@@ -62,7 +62,7 @@ class TestClipEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "clip-embedding",
+                "compute", "clip-embedding",
                 "embed",
                 "--watch",
                 str(test_image),
@@ -92,7 +92,7 @@ class TestClipEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "clip-embedding",
+                "compute", "clip-embedding",
                 "embed",
                 str(test_image),
                 "--output",
@@ -122,7 +122,7 @@ class TestClipEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "clip-embedding",
+                "compute", "clip-embedding",
                 "embed",
                 "/nonexistent/file.jpg",
             ],
@@ -146,7 +146,7 @@ class TestClipEmbeddingCLI:
             mandatory_args
             + [
                 "--json",
-                "clip-embedding",
+                "compute", "clip-embedding",
                 "embed",
                 str(test_image),
                 "--timeout",

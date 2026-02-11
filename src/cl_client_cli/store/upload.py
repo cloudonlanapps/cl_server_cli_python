@@ -55,7 +55,7 @@ def upload_entity(
 
                         # Upload each file
                         success_count = 0
-                        output_json = ctx.obj.output_json
+                        output_json = ctx.obj.config.output_json
 
                         for img_file in image_files:
                             try:

@@ -18,4 +18,4 @@ def test_store_admin_set_guest_mode(mock_store_manager, sample_store_pref, manda
     # Verify config was updated
     assert result.exit_code == 0
     assert "disabled" in result.output
-    mock_store_manager.update_guest_mode.assert_called_once_with(guest_mode=False)
+    mock_store_manager.update_guest_mode.assert_called_once_with(False)

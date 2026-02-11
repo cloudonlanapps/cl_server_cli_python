@@ -36,7 +36,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",
@@ -62,7 +62,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "list",
             ],
             env=cli_env,
@@ -87,7 +87,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",
@@ -105,7 +105,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "get",
                 str(user_id),
             ],
@@ -131,7 +131,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",
@@ -149,7 +149,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "update",
                 str(user_id),
                 "--active",  # Changed from --email
@@ -175,7 +175,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",
@@ -193,7 +193,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "delete",
                 str(user_id),
                 "--yes",  # Auto-confirm
@@ -218,7 +218,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",
@@ -236,7 +236,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "get",  # user permissions list doesn't exist, it's just user get
                 str(user_id),
             ],
@@ -262,7 +262,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",
@@ -280,7 +280,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "update",
                 str(user_id),
                 "--permissions",
@@ -308,7 +308,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "create",
                 username,
                 "test_password",
@@ -329,7 +329,7 @@ class TestUserManagementCLI:
             mandatory_args
             + [
                 "--json",
-                "user",
+                "admin", "user",
                 "update",
                 str(user_id),
                 "--permissions",

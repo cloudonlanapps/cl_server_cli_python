@@ -36,7 +36,7 @@ class TestHlsStreamingCLI:
             mandatory_args
             + [
                 "--json",
-                "hls-streaming",
+                "compute", "hls-streaming",
                 "generate-manifest",
                 str(test_image),
             ],
@@ -62,7 +62,7 @@ class TestHlsStreamingCLI:
             mandatory_args
             + [
                 "--json",
-                "hls-streaming",
+                "compute", "hls-streaming",
                 "generate-manifest",
                 "--watch",
                 str(test_image),
@@ -92,7 +92,7 @@ class TestHlsStreamingCLI:
             mandatory_args
             + [
                 "--json",
-                "hls-streaming",
+                "compute", "hls-streaming",
                 "generate-manifest",
                 str(test_image),
                 "--output",
@@ -122,7 +122,7 @@ class TestHlsStreamingCLI:
             mandatory_args
             + [
                 "--json",
-                "hls-streaming",
+                "compute", "hls-streaming",
                 "generate-manifest",
                 "/nonexistent/file.mp4",
             ],

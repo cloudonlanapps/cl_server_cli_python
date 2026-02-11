@@ -36,6 +36,7 @@ class TestExifCLI:
             mandatory_args
             + [
                 "--json",
+                "compute",
                 "exif",
                 "extract",
                 str(test_image),
@@ -62,6 +63,7 @@ class TestExifCLI:
             mandatory_args
             + [
                 "--json",
+                "compute",
                 "exif",
                 "extract",
                 "--watch",
@@ -92,6 +94,7 @@ class TestExifCLI:
             mandatory_args
             + [
                 "--json",
+                "compute",
                 "exif",
                 "extract",
                 str(test_image),
@@ -122,6 +125,7 @@ class TestExifCLI:
             mandatory_args
             + [
                 "--json",
+                "compute",
                 "exif",
                 "extract",
                 "/nonexistent/file.jpg",

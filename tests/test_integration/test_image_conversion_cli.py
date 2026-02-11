@@ -36,7 +36,7 @@ class TestImageConversionCLI:
             mandatory_args
             + [
                 "--json",
-                "image-conversion",
+                "compute", "image-conversion",
                 "convert",
                 str(test_image),
                 "--format",
@@ -64,7 +64,7 @@ class TestImageConversionCLI:
             mandatory_args
             + [
                 "--json",
-                "image-conversion",
+                "compute", "image-conversion",
                 "convert",
                 "--watch",
                 str(test_image),
@@ -96,7 +96,7 @@ class TestImageConversionCLI:
             mandatory_args
             + [
                 "--json",
-                "image-conversion",
+                "compute", "image-conversion",
                 "convert",
                 str(test_image),
                 "--format",
@@ -128,7 +128,7 @@ class TestImageConversionCLI:
             mandatory_args
             + [
                 "--json",
-                "image-conversion",
+                "compute", "image-conversion",
                 "convert",
                 "/nonexistent/file.jpg",
                 "--format",
@@ -154,7 +154,7 @@ class TestImageConversionCLI:
             mandatory_args
             + [
                 "--json",
-                "image-conversion",
+                "compute", "image-conversion",
                 "convert",
                 str(test_image),
                 "--format",

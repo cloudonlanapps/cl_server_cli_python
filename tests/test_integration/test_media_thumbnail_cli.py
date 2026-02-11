@@ -36,7 +36,7 @@ class TestMediaThumbnailCLI:
             mandatory_args
             + [
                 "--json",
-                "media-thumbnail",
+                "compute", "media-thumbnail",
                 "generate",
                 str(test_image),
                 "-w", "128",
@@ -64,7 +64,7 @@ class TestMediaThumbnailCLI:
             mandatory_args
             + [
                 "--json",
-                "media-thumbnail",
+                "compute", "media-thumbnail",
                 "generate",
                 "--watch",
                 str(test_image),
@@ -96,7 +96,7 @@ class TestMediaThumbnailCLI:
             mandatory_args
             + [
                 "--json",
-                "media-thumbnail",
+                "compute", "media-thumbnail",
                 "generate",
                 str(test_image),
                 "-w", "128",
@@ -128,7 +128,7 @@ class TestMediaThumbnailCLI:
             mandatory_args
             + [
                 "--json",
-                "media-thumbnail",
+                "compute", "media-thumbnail",
                 "generate",
                 "/nonexistent/file.jpg",
                 "-w", "128",

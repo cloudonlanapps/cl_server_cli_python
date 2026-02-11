@@ -20,4 +20,4 @@ def test_store_intelligence_success(mock_store_manager, sample_entity_intelligen
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data["overall_status"] == "completed"
-    mock_store_manager.get_entity_intelligence.assert_called_once_with(1)
+    mock_store_manager.get_entity_intelligence.assert_called_once_with(entity_id=1)

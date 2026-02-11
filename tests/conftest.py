@@ -36,89 +36,171 @@ T = TypeVar('T', bound=BaseModel)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add CLI options for all tests."""
+    """Add CLI options for all tests.
+
+    Values come from: CLI options > config file > defaults.
+    Environment variables are NOT supported to avoid undefined behavior.
+    """
     parser.addoption(
         "--auth-url",
         action="store",
-        default=os.getenv("CL_AUTH_URL"),
-        help="Auth service URL",
+        default=None,
+        help="Auth service URL (or use config file)",
     )
     parser.addoption(
         "--compute-url",
         action="store",
-        default=os.getenv("CL_COMPUTE_URL"),
-        help="Compute service URL",
+        default=None,
+        help="Compute service URL (or use config file)",
     )
     parser.addoption(
         "--store-url",
         action="store",
-        default=os.getenv("CL_STORE_URL"),
-        help="Store service URL",
+        default=None,
+        help="Store service URL (or use config file)",
     )
     parser.addoption(
         "--mqtt-url",
         action="store",
-        default=os.getenv("CL_MQTT_URL"),
-        help="MQTT broker URL",
+        default=None,
+        help="MQTT broker URL (or use config file)",
     )
     parser.addoption(
         "--username",
         action="store",
-        default=os.getenv("CL_USERNAME"),
-        help="Username for authenticated tests",
+        default=None,
+        help="Username for authenticated tests (or use config file)",
     )
     parser.addoption(
         "--password",
         action="store",
-        default=os.getenv("CL_PASSWORD"),
+        default=None,
         help="Password for authenticated tests",
     )
 
 
 @pytest.fixture(scope="session")
 def auth_url(request: pytest.FixtureRequest) -> str:
-    """Get auth URL."""
+    """Get auth URL from CLI option, env var, config file, or default to localhost."""
     val = request.config.getoption("--auth-url")
-    return str(val) if val else "http://localhost:8010"
+    if val:
+        return str(val)
+
+    # Try to load from config file
+    from pathlib import Path
+    config_path = Path.home() / ".cl_client_config.json"
+    if config_path.exists():
+        try:
+            from cl_client_cli.common.config import CLIConfig
+            config = CLIConfig.from_file(config_path)
+            if config.server_pref.auth_url:
+                return config.server_pref.auth_url
+        except Exception:
+            pass
+
+    return "http://localhost:8010"
 
 
 @pytest.fixture(scope="session")
 def compute_url(request: pytest.FixtureRequest) -> str:
-    """Get compute URL."""
+    """Get compute URL from CLI option, env var, config file, or default to localhost."""
     val = request.config.getoption("--compute-url")
-    return str(val) if val else "http://localhost:8012"
+    if val:
+        return str(val)
+
+    # Try to load from config file
+    from pathlib import Path
+    config_path = Path.home() / ".cl_client_config.json"
+    if config_path.exists():
+        try:
+            from cl_client_cli.common.config import CLIConfig
+            config = CLIConfig.from_file(config_path)
+            if config.server_pref.compute_url:
+                return config.server_pref.compute_url
+        except Exception:
+            pass
+
+    return "http://localhost:8012"
 
 
 @pytest.fixture(scope="session")
 def store_url(request: pytest.FixtureRequest) -> str:
-    """Get store URL."""
+    """Get store URL from CLI option, env var, config file, or default to localhost."""
     val = request.config.getoption("--store-url")
-    return str(val) if val else "http://localhost:8011"
+    if val:
+        return str(val)
+
+    # Try to load from config file
+    from pathlib import Path
+    config_path = Path.home() / ".cl_client_config.json"
+    if config_path.exists():
+        try:
+            from cl_client_cli.common.config import CLIConfig
+            config = CLIConfig.from_file(config_path)
+            if config.server_pref.store_url:
+                return config.server_pref.store_url
+        except Exception:
+            pass
+
+    return "http://localhost:8011"
 
 
 @pytest.fixture(scope="session")
 def mqtt_url(request: pytest.FixtureRequest) -> str:
-    """Get MQTT URL."""
+    """Get MQTT URL from CLI option, env var, config file, or default from config."""
     val = request.config.getoption("--mqtt-url")
-    return str(val) if val else "mqtt://localhost:1883"
+    if val:
+        return str(val)
+
+    # Try to load from config file
+    from pathlib import Path
+    config_path = Path.home() / ".cl_client_config.json"
+    if config_path.exists():
+        try:
+            from cl_client_cli.common.config import CLIConfig
+            config = CLIConfig.from_file(config_path)
+            if config.server_pref.mqtt_url:
+                return config.server_pref.mqtt_url
+        except Exception:
+            pass
+
+    # Default fallback - but should always be set via config file for integration tests
+    # Using localhost as last resort for unit tests only
+    return "mqtt://localhost:1883"
 
 
 @pytest.fixture(scope="session")
 def username(request: pytest.FixtureRequest) -> str | None:
-    """Get username."""
-    return request.config.getoption("--username")
+    """Get username from CLI option, env var, or config file."""
+    val = request.config.getoption("--username")
+    if val:
+        return val
+
+    # Try to load from config file
+    from pathlib import Path
+    config_path = Path.home() / ".cl_client_config.json"
+    if config_path.exists():
+        try:
+            from cl_client_cli.common.config import CLIConfig
+            config = CLIConfig.from_file(config_path)
+            if config.username:
+                return config.username
+        except Exception:
+            pass
+
+    return None
 
 
 @pytest.fixture(scope="session")
 def password(request: pytest.FixtureRequest) -> str | None:
-    """Get password."""
+    """Get password from CLI option or env var."""
     return request.config.getoption("--password")
 
 
 @pytest.fixture(scope="session")
-def mandatory_args(auth_url, compute_url, store_url, mqtt_url) -> list[str]:
+def mandatory_args(auth_url, compute_url, store_url, mqtt_url, username, password) -> list[str]:
     """Get mandatory CLI arguments for all commands."""
-    return [
+    args = [
         "--auth-url",
         auth_url,
         "--compute-url",
@@ -128,6 +210,14 @@ def mandatory_args(auth_url, compute_url, store_url, mqtt_url) -> list[str]:
         "--mqtt-url",
         mqtt_url,
     ]
+
+    # Add username and password if provided (for integration tests)
+    if username:
+        args.extend(["--username", username])
+    if password:
+        args.extend(["--password", password])
+
+    return args
 
 # ============================================================================
 # TEST ARTIFACT DIRECTORY
@@ -441,18 +531,13 @@ def cli_runner():
 
 
 @pytest.fixture
-def cli_env(
-    auth_url: str, compute_url: str, store_url: str, mqtt_url: str, username: str, password: str
-):
-    """Environment variables for CLI commands."""
-    return {
-        "CL_AUTH_URL": auth_url,
-        "CL_COMPUTE_URL": compute_url,
-        "CL_STORE_URL": store_url,
-        "CL_MQTT_URL": mqtt_url,
-        "CL_USERNAME": username,
-        "CL_PASSWORD": password,
-    }
+def cli_env():
+    """Environment variables for CLI commands.
+
+    Empty dict - all configuration is passed via CLI arguments or config file.
+    Environment variables are NOT supported to avoid undefined behavior.
+    """
+    return {}
 
 
 # ============================================================================
@@ -570,45 +655,77 @@ def temp_video_file(tmp_path: Path) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def mock_config():
-    """Mock load_config_file to return empty config during tests."""
-    with patch("cl_client_cli.common.load_config_file") as mock:
-        mock.return_value = {
-            "auth_url": None,
-            "compute_url": None,
-            "store_url": None,
-            "mqtt_url": None,
-            "username": None,
-        }
+def mock_config(request):
+    """Mock CLIConfig.from_file to return empty config during tests.
+
+    Skip this mock for integration tests to allow real config loading.
+    """
+    # Skip mocking for integration tests - let them use real config file
+    if 'integration' in request.keywords:
+        yield None
+        return
+
+    from cl_client import ServerPref
+    from cl_client_cli.common.config import CLIConfig
+
+    with patch("cl_client_cli.common.config.CLIConfig.from_file") as mock:
+        mock.return_value = CLIConfig(
+            server_pref=ServerPref(),
+            username=None,
+            password=None,
+            no_auth=False,
+            output_json=False
+        )
         yield mock
 
 
 @pytest.fixture
 def mock_compute_client():
     """Create a mock ComputeClient for CLI testing."""
-    # Mock get_client in main.py to return our mock instance
-    with patch("cl_client_cli.common.get_client", new_callable=AsyncMock) as mock_get_client:
-        mock_client = MagicMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.close = AsyncMock(return_value=None)
-        mock_client.download_job_file = AsyncMock(return_value=None)
+    mock_client = MagicMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client.close = AsyncMock(return_value=None)
+    mock_client.download_job_file = AsyncMock(return_value=None)
 
-        # Mock plugin clients
-        mock_client.clip_embedding = MagicMock()
-        mock_client.dino_embedding = MagicMock()
-        mock_client.exif = MagicMock()
-        mock_client.face_detection = MagicMock()
-        mock_client.face_embedding = MagicMock()
-        mock_client.hash = MagicMock()
-        mock_client.hls_streaming = MagicMock()
-        mock_client.image_conversion = MagicMock()
-        mock_client.media_thumbnail = MagicMock()
+    # Mock plugin clients
+    mock_client.clip_embedding = MagicMock()
+    mock_client.dino_embedding = MagicMock()
+    mock_client.exif = MagicMock()
+    mock_client.face_detection = MagicMock()
+    mock_client.face_embedding = MagicMock()
+    mock_client.hash = MagicMock()
+    mock_client.hls_streaming = MagicMock()
+    mock_client.image_conversion = MagicMock()
+    mock_client.media_thumbnail = MagicMock()
 
-        # Configure the getter to return our mock instance
-        mock_get_client.return_value = mock_client
+    # Configure the async getter to return our mock instance
+    async def mock_get_client_func(ctx):
+        return mock_client
 
-        yield mock_client
+    # Patch get_compute_client in all compute submodules where it's used
+    # Each module imports it, so we need to patch it in each module's namespace
+    patches = [
+        patch("cl_client_cli.compute.clip_embedding.get_compute_client", side_effect=mock_get_client_func),
+        patch("cl_client_cli.compute.dino_embedding.get_compute_client", side_effect=mock_get_client_func),
+        patch("cl_client_cli.compute.exif.get_compute_client", side_effect=mock_get_client_func),
+        patch("cl_client_cli.compute.face_detection.get_compute_client", side_effect=mock_get_client_func),
+        patch("cl_client_cli.compute.face_embedding.get_compute_client", side_effect=mock_get_client_func),
+        patch("cl_client_cli.compute.hash.get_compute_client", side_effect=mock_get_client_func),
+        patch("cl_client_cli.compute.hls_streaming.get_compute_client", side_effect=mock_get_client_func),
+        patch("cl_client_cli.compute.image_conversion.get_compute_client", side_effect=mock_get_client_func),
+        patch("cl_client_cli.compute.media_thumbnail.get_compute_client", side_effect=mock_get_client_func),
+    ]
+
+    # Start all patches
+    for p in patches:
+        p.start()
+
+    yield mock_client
+
+    # Stop all patches
+    for p in patches:
+        p.stop()
 
 
 @pytest.fixture
@@ -674,32 +791,58 @@ def failed_job() -> JobResponse:
 @pytest.fixture
 def mock_store_manager():
     """Create a mock StoreManager for CLI testing."""
-    # Mock get_store_manager in main.py to return our mock instance
-    with patch("cl_client_cli.common.get_store_manager", new_callable=AsyncMock) as mock_get_manager:
-        # Create mock manager instance
-        mock_manager = MagicMock()
-        mock_manager.__aenter__ = AsyncMock(return_value=mock_manager)
-        mock_manager.__aexit__ = AsyncMock(return_value=None)
+    # Create mock manager instance
+    mock_manager = MagicMock()
+    mock_manager.__aenter__ = AsyncMock(return_value=mock_manager)
+    mock_manager.__aexit__ = AsyncMock(return_value=None)
 
-        # Mock all StoreManager methods to return success results
-        mock_manager.list_entities = AsyncMock()
-        mock_manager.read_entity = AsyncMock()
-        mock_manager.create_entity = AsyncMock()
-        mock_manager.update_entity = AsyncMock()
-        mock_manager.patch_entity = AsyncMock()
-        mock_manager.delete_entity = AsyncMock()
-        mock_manager.get_versions = AsyncMock()
-        mock_manager.get_pref = AsyncMock()
-        mock_manager.update_guest_mode = AsyncMock()
-        mock_manager.delete_face = AsyncMock()
-        mock_manager.get_entity_intelligence = AsyncMock()
-        mock_manager.get_audit_report = AsyncMock()
-        mock_manager.clear_orphans = AsyncMock()
+    # Mock all StoreManager methods to return success results
+    mock_manager.list_entities = AsyncMock()
+    mock_manager.read_entity = AsyncMock()
+    mock_manager.create_entity = AsyncMock()
+    mock_manager.update_entity = AsyncMock()
+    mock_manager.patch_entity = AsyncMock()
+    mock_manager.delete_entity = AsyncMock()
+    mock_manager.get_versions = AsyncMock()
+    mock_manager.get_pref = AsyncMock()
+    mock_manager.update_guest_mode = AsyncMock()
+    mock_manager.delete_face = AsyncMock()
+    mock_manager.get_entity_intelligence = AsyncMock()
+    mock_manager.get_audit_report = AsyncMock()
+    mock_manager.clear_orphans = AsyncMock()
 
-        # Configure the getter to return our mock instance
-        mock_get_manager.return_value = mock_manager
+    # Configure the async getter to return our mock instance
+    async def mock_get_manager_func(ctx):
+        return mock_manager
 
-        yield mock_manager
+    # Patch get_store_manager in all store submodules where it's used
+    patches = [
+        patch("cl_client_cli.store.list.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.create.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.get.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.update.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.patch.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.delete.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.upload.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.versions.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.face.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.store.intelligence.get_store_manager", side_effect=mock_get_manager_func),
+        # Also patch admin/store modules that use get_store_manager
+        patch("cl_client_cli.admin.store.audit.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.admin.store.config.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.admin.store.guest_mode.get_store_manager", side_effect=mock_get_manager_func),
+        patch("cl_client_cli.admin.store.orphans.get_store_manager", side_effect=mock_get_manager_func),
+    ]
+
+    # Start all patches
+    for p in patches:
+        p.start()
+
+    yield mock_manager
+
+    # Stop all patches
+    for p in patches:
+        p.stop()
 
 
 @pytest.fixture

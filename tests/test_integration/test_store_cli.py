@@ -255,8 +255,8 @@ class TestStoreCLI:
             mandatory_args
             + [
                 "--json",
-                "store",
                 "admin",
+                "store",
                 "config",
             ],
             env=cli_env,
