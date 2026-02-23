@@ -9,18 +9,28 @@ from .config import CLIConfig
 
 
 def _get_encryption_key() -> bytes:
-    """Generate encryption key from machine UUID.
-
-    Uses machine UUID only (not username) since username is in the config being encrypted.
+    """Get or generate encryption key.
+    
+    Generates a persistent key and saves it to ~/.cl_client_key
+    to avoid issues with unstable MAC addresses on some OS.
     """
-    try:
-        machine_id = str(uuid.getnode())
-    except Exception:
-        machine_id = "default-machine"
+    key_path = Path.home() / ".cl_client_key"
+    if key_path.exists():
+        try:
+            return key_path.read_bytes()
+        except Exception:
+            pass
 
-    key_material = f"cl-client:{machine_id}".encode()
-    key_hash = hashlib.sha256(key_material).digest()
-    return base64.urlsafe_b64encode(key_hash)
+    # Generate a new Fernet key and save it
+    key = Fernet.generate_key()
+    try:
+        with open(key_path, "wb") as f:
+            f.write(key)
+        key_path.chmod(0o600)
+    except Exception:
+        pass
+        
+    return key
 
 
 def save_config_to_cache(config: CLIConfig) -> None:
@@ -59,40 +69,34 @@ def load_config_from_cache() -> CLIConfig | None:
     if not cache_path.exists():
         return None
 
-    try:
-        with open(cache_path) as f:
-            cache_data = json.load(f)
+    with open(cache_path) as f:
+        cache_data = json.load(f)
 
-        # Check for old format (has 'username' and 'encrypted_password')
-        if "username" in cache_data or "encrypted_password" in cache_data:
-            # Old format detected - clear it and return None
-            clear_config_cache()
-            return None
-
-        # Check expiration (6 hours)
-        timestamp = cache_data.get("timestamp", 0)
-        if (time.time() - timestamp) / 3600 > 6:
-            clear_config_cache()
-            return None
-
-        # Get encrypted config
-        encrypted_config = cache_data.get("encrypted_config")
-        if not encrypted_config:
-            return None
-
-        # Decrypt and deserialize
-        key = _get_encryption_key()
-        cipher = Fernet(key)
-        config_json = cipher.decrypt(encrypted_config.encode()).decode()
-
-        # Parse back to CLIConfig using Pydantic
-        config = CLIConfig.model_validate_json(config_json)
-        return config
-
-    except Exception:
-        # On any error, clear cache and return None
+    # Check for old format (has 'username' and 'encrypted_password')
+    if "username" in cache_data or "encrypted_password" in cache_data:
+        # Old format detected - clear it and return None
         clear_config_cache()
         return None
+
+    # Check expiration (6 hours)
+    timestamp = cache_data.get("timestamp", 0)
+    if (time.time() - timestamp) / 3600 > 6:
+        clear_config_cache()
+        return None
+
+    # Get encrypted config
+    encrypted_config = cache_data.get("encrypted_config")
+    if not encrypted_config:
+        return None
+
+    # Decrypt and deserialize
+    key = _get_encryption_key()
+    cipher = Fernet(key)
+    config_json = cipher.decrypt(encrypted_config.encode()).decode()
+
+    # Parse back to CLIConfig using Pydantic
+    config = CLIConfig.model_validate_json(config_json)
+    return config
 
 
 def clear_config_cache() -> None:

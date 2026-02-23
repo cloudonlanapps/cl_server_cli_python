@@ -29,6 +29,7 @@ from .delete import delete_entity
 from .versions import get_versions
 from .face import face
 from .intelligence import get_intelligence
+from .download import download_media
 
 store.add_command(list_entities, name="list")
 store.add_command(upload_entity, name="upload")
@@ -40,3 +41,4 @@ store.add_command(delete_entity, name="delete")
 store.add_command(get_versions, name="versions")
 store.add_command(face)
 store.add_command(get_intelligence, name="intelligence")
+store.add_command(download_media, name="download")
